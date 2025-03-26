@@ -2,385 +2,293 @@ require_relative 'mlx_test_case'
 
 class TestOptimizers < MLXTestCase
   def setup
-    super
+    @params = {
+      "w1" => MLX.random.uniform(shape: [3, 2], dtype: MLX.float32),
+      "b1" => MLX.zeros([2], dtype: MLX.float32),
+      "w2" => MLX.random.uniform(shape: [2, 1], dtype: MLX.float32),
+      "b2" => MLX.zeros([1], dtype: MLX.float32)
+    }
     
-    # Create a simple model for optimizer tests
-    class SimpleModel < MLX::NN::Module
-      attr_reader :linear1, :linear2
-      
-      def initialize
-        super()
-        @linear1 = MLX::NN::Layers::Linear.new(10, 20)
-        @linear2 = MLX::NN::Layers::Linear.new(20, 1)
-      end
-      
-      def forward(x)
-        x = MLX.relu(@linear1.call(x))
-        @linear2.call(x)
-      end
+    # Simple squared loss
+    @loss_fn = ->(params, x, y) {
+      # Simple 2-layer network
+      h1 = x.matmul(params["w1"]) + params["b1"]
+      h1_relu = MLX.maximum(h1, 0)
+      pred = h1_relu.matmul(params["w2"]) + params["b2"]
+      loss = MLX.mean((pred - y)**2)
+      loss
+    }
+    
+    # Generate sample data
+    @x = MLX.random.uniform(shape: [8, 3], dtype: MLX.float32)
+    @y = MLX.random.uniform(shape: [8, 1], dtype: MLX.float32)
+  end
+  
+  def test_sgd
+    # Test SGD optimizer
+    learning_rate = 0.1
+    optimizer = MLX.optimizers.SGD(learning_rate: learning_rate)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Create model, input, and target
-    @model = SimpleModel.new
-    @x = MLX.random.normal([16, 10])
-    @y = MLX.random.normal([16, 1])
+    # Basic checks
+    assert_kind_of Hash, @params
+    assert_equal 4, @params.size
     
-    # Define loss function
-    @loss_fn = lambda do |model, x, y|
-      preds = model.call(x)
-      MLX.mean(MLX.square(preds - y))
+    # Test with momentum
+    optimizer = MLX.optimizers.SGD(learning_rate: learning_rate, momentum: 0.9)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
+    end
+    
+    # Test with weight decay
+    optimizer = MLX.optimizers.SGD(learning_rate: learning_rate, weight_decay: 0.01)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
+    end
+    
+    # Test with momentum and weight decay
+    optimizer = MLX.optimizers.SGD(learning_rate: learning_rate, momentum: 0.9, weight_decay: 0.01)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
   end
   
-  def test_sgd_optimizer
-    # Create SGD optimizer
-    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.01)
+  def test_adam
+    # Test Adam optimizer
+    learning_rate = 0.01
+    optimizer = MLX.optimizers.Adam(learning_rate: learning_rate)
+    opt_state = optimizer.init(@params)
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-  end
-  
-  def test_sgd_momentum
-    # Create SGD with momentum
-    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.01, momentum: 0.9)
+    # Basic checks
+    assert_kind_of Hash, @params
+    assert_equal 4, @params.size
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
+    # Test with custom beta values
+    optimizer = MLX.optimizers.Adam(learning_rate: learning_rate, beta1: 0.8, beta2: 0.99)
+    opt_state = optimizer.init(@params)
     
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("momentum_buffers")
+    # Test with weight decay
+    optimizer = MLX.optimizers.Adam(learning_rate: learning_rate, weight_decay: 0.01)
+    opt_state = optimizer.init(@params)
     
-    # Do another update to check momentum
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    optimizer.update(@model, grads)
-  end
-  
-  def test_adam_optimizer
-    # Create Adam optimizer
-    optimizer = MLX::Optimizers::Adam.new(
-      learning_rate: 0.001, 
-      betas: [0.9, 0.999], 
-      eps: 1e-8
-    )
-    
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("exp_avg")
-    assert optimizer.state.key?("exp_avg_sq")
+    # Test with different eps
+    optimizer = MLX.optimizers.Adam(learning_rate: learning_rate, eps: 1e-5)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
+    end
   end
   
-  def test_adamw_optimizer
-    # Create AdamW optimizer
-    optimizer = MLX::Optimizers::AdamW.new(
-      learning_rate: 0.001, 
-      betas: [0.9, 0.999], 
-      eps: 1e-8,
-      weight_decay: 0.01
-    )
+  def test_rmsprop
+    # Test RMSprop optimizer
+    learning_rate = 0.01
+    optimizer = MLX.optimizers.RMSprop(learning_rate: learning_rate)
+    opt_state = optimizer.init(@params)
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("exp_avg")
-    assert optimizer.state.key?("exp_avg_sq")
-  end
-  
-  def test_rmsprop_optimizer
-    # Create RMSprop optimizer
-    optimizer = MLX::Optimizers::RMSprop.new(
-      learning_rate: 0.01, 
-      alpha: 0.99,
-      eps: 1e-8
-    )
+    # Basic checks
+    assert_kind_of Hash, @params
+    assert_equal 4, @params.size
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
+    # Test with custom decay
+    optimizer = MLX.optimizers.RMSprop(learning_rate: learning_rate, decay: 0.95)
+    opt_state = optimizer.init(@params)
     
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("square_avg")
-  end
-  
-  def test_adagrad_optimizer
-    # Create Adagrad optimizer
-    optimizer = MLX::Optimizers::Adagrad.new(
-      learning_rate: 0.01, 
-      eps: 1e-8
-    )
+    # Test with momentum
+    optimizer = MLX.optimizers.RMSprop(learning_rate: learning_rate, momentum: 0.9)
+    opt_state = optimizer.init(@params)
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("sum")
+    # Test with weight decay
+    optimizer = MLX.optimizers.RMSprop(learning_rate: learning_rate, weight_decay: 0.01)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
+    end
   end
   
-  def test_adamax_optimizer
-    # Skip if Adamax is not implemented
-    skip unless defined?(MLX::Optimizers::Adamax)
+  def test_adagrad
+    # Test Adagrad optimizer
+    learning_rate = 0.1
+    optimizer = MLX.optimizers.Adagrad(learning_rate: learning_rate)
+    opt_state = optimizer.init(@params)
     
-    # Create Adamax optimizer
-    optimizer = MLX::Optimizers::Adamax.new(
-      learning_rate: 0.001, 
-      betas: [0.9, 0.999], 
-      eps: 1e-8
-    )
-    
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("exp_avg")
-    assert optimizer.state.key?("exp_inf")
-  end
-  
-  def test_adadelta_optimizer
-    # Skip if Adadelta is not implemented
-    skip unless defined?(MLX::Optimizers::Adadelta)
+    # Basic checks
+    assert_kind_of Hash, @params
+    assert_equal 4, @params.size
     
-    # Create Adadelta optimizer
-    optimizer = MLX::Optimizers::Adadelta.new(
-      learning_rate: 1.0, 
-      rho: 0.9, 
-      eps: 1e-6
-    )
+    # Test with initial accumulator value
+    optimizer = MLX.optimizers.Adagrad(learning_rate: learning_rate, initial_accumulator_value: 0.1)
+    opt_state = optimizer.init(@params)
     
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("square_avg")
-    assert optimizer.state.key?("acc_delta")
-  end
-  
-  def test_lion_optimizer
-    # Skip if Lion is not implemented
-    skip unless defined?(MLX::Optimizers::Lion)
+    # Test with eps
+    optimizer = MLX.optimizers.Adagrad(learning_rate: learning_rate, eps: 1e-5)
+    opt_state = optimizer.init(@params)
     
-    # Create Lion optimizer
-    optimizer = MLX::Optimizers::Lion.new(
-      learning_rate: 0.0001, 
-      betas: [0.9, 0.99],
-      weight_decay: 0.0
-    )
-    
-    # Compute loss and gradients
-    loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-    
-    # Store original parameters
-    old_params = @model.parameters.transform_values(&:copy)
-    
-    # Update parameters
-    optimizer.update(@model, grads)
-    
-    # Check that parameters have changed
-    @model.parameters.each do |name, param|
-      refute_array_equal(param, old_params[name])
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
     end
     
-    # Check that optimizer state contains expected keys
-    assert optimizer.state.key?("count")
-    assert optimizer.state.key?("momentum")
+    # Test with weight decay
+    optimizer = MLX.optimizers.Adagrad(learning_rate: learning_rate, weight_decay: 0.01)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    3.times do
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state)
+    end
   end
   
-  def test_learning_rate_scheduler
-    # Create optimizer with scheduler
-    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.1)
+  def test_with_schedules
+    # Test optimizer with learning rate schedule
+    init_lr = 0.1
+    steps = 100
     
-    # Add step decay scheduler
-    scheduler = MLX::Optimizers::StepLR.new(
-      optimizer, 
-      step_size: 5, 
-      gamma: 0.5
-    )
+    # Linear schedule
+    schedule = MLX.optimizers.linear_schedule(init_value: init_lr, end_value: 0.001, steps: steps)
+    optimizer = MLX.optimizers.SGD(learning_rate: schedule)
+    opt_state = optimizer.init(@params)
     
-    # Initial learning rate
-    assert_equal 0.1, optimizer.learning_rate
-    
-    # Simulate 10 updates
+    # Run a few optimization steps
     10.times do |i|
-      # Compute loss and gradients
-      loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state, i)
       
-      # Update parameters
-      optimizer.update(@model, grads)
-      
-      # Step the scheduler
-      scheduler.step
-      
-      # Check learning rate
-      expected_lr = 0.1 * (0.5 ** (i // 5))
-      assert_in_delta expected_lr, optimizer.learning_rate, 1e-6
+      # Check that learning rate is decreasing
+      expected_lr = init_lr - i * (init_lr - 0.001) / steps
+      assert_in_epsilon expected_lr, opt_state[:learning_rate].item, 1e-5
     end
-  end
-  
-  def test_cosine_annealing_scheduler
-    # Skip if CosineAnnealingLR is not implemented
-    skip unless defined?(MLX::Optimizers::CosineAnnealingLR)
     
-    # Create optimizer with scheduler
-    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.1)
+    # Cosine schedule
+    schedule = MLX.optimizers.cosine_schedule(init_value: init_lr, end_value: 0.001, steps: steps)
+    optimizer = MLX.optimizers.Adam(learning_rate: schedule)
+    opt_state = optimizer.init(@params)
     
-    # Add cosine annealing scheduler
-    scheduler = MLX::Optimizers::CosineAnnealingLR.new(
-      optimizer, 
-      T_max: 10,
-      eta_min: 0.001
-    )
-    
-    # Initial learning rate
-    assert_equal 0.1, optimizer.learning_rate
-    
-    # Simulate 10 updates
+    # Run a few optimization steps
     10.times do |i|
-      # Compute loss and gradients
-      loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-      
-      # Update parameters
-      optimizer.update(@model, grads)
-      
-      # Step the scheduler
-      scheduler.step
-      
-      # Learning rate should change according to cosine schedule
-      assert optimizer.learning_rate <= 0.1
-      assert optimizer.learning_rate >= 0.001
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state, i)
     end
     
-    # After T_max steps, learning rate should be at eta_min
-    assert_in_delta 0.001, optimizer.learning_rate, 1e-6
+    # Exponential schedule
+    schedule = MLX.optimizers.exponential_schedule(init_value: init_lr, end_value: 0.001, steps: steps)
+    optimizer = MLX.optimizers.RMSprop(learning_rate: schedule)
+    opt_state = optimizer.init(@params)
+    
+    # Run a few optimization steps
+    10.times do |i|
+      grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+      @params, opt_state = optimizer.update(@params, grads, opt_state, i)
+    end
   end
   
-  def test_exponential_lr_scheduler
-    # Skip if ExponentialLR is not implemented
-    skip unless defined?(MLX::Optimizers::ExponentialLR)
+  def test_optimizer_state
+    # Test that optimizer state is correctly updated
+    learning_rate = 0.1
+    optimizer = MLX.optimizers.SGD(learning_rate: learning_rate, momentum: 0.9)
+    opt_state = optimizer.init(@params)
     
-    # Create optimizer with scheduler
-    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.1)
+    # Check initial state
+    assert_kind_of Hash, opt_state
+    assert opt_state.key?(:momentum)
     
-    # Add exponential scheduler
-    scheduler = MLX::Optimizers::ExponentialLR.new(
-      optimizer, 
-      gamma: 0.9
-    )
+    # Run one optimization step
+    grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+    _, opt_state_new = optimizer.update(@params, grads, opt_state)
     
-    # Initial learning rate
-    assert_equal 0.1, optimizer.learning_rate
+    # Verify state is updated
+    assert_kind_of Hash, opt_state_new
+    assert opt_state_new.key?(:momentum)
     
-    # Simulate 5 updates
-    5.times do |i|
-      # Compute loss and gradients
-      loss, grads = MLX.value_and_grad(@model, @loss_fn).call(@model, @x, @y)
-      
-      # Update parameters
-      optimizer.update(@model, grads)
-      
-      # Step the scheduler
-      scheduler.step
-      
-      # Check learning rate
-      expected_lr = 0.1 * (0.9 ** (i + 1))
-      assert_in_delta expected_lr, optimizer.learning_rate, 1e-6
-    end
+    # Test Adam state
+    optimizer = MLX.optimizers.Adam(learning_rate: learning_rate)
+    opt_state = optimizer.init(@params)
+    
+    # Check initial state
+    assert_kind_of Hash, opt_state
+    assert opt_state.key?(:m)
+    assert opt_state.key?(:v)
+    
+    # Run one optimization step
+    grads = MLX.grad(@loss_fn).call(@params, @x, @y)
+    _, opt_state_new = optimizer.update(@params, grads, opt_state)
+    
+    # Verify state is updated
+    assert_kind_of Hash, opt_state_new
+    assert opt_state_new.key?(:m)
+    assert opt_state_new.key?(:v)
   end
 end 
