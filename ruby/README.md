@@ -29,7 +29,7 @@ gem install mlx-ruby
 ### Building from source
 
 ```bash
-git clone https://github.com/yourusername/mlx-ruby.git
+git clone https://github.com/skryl/mlx-ruby.git
 cd mlx-ruby
 bundle install
 rake compile
@@ -187,7 +187,7 @@ MLX.set_default_device('gpu')
 
 For complete API documentation, please visit:
 
-[https://yourusername.github.io/mlx-ruby/](https://yourusername.github.io/mlx-ruby/)
+[https://mlx-ruby.github.io/mlx-ruby/](https://mlx-ruby.github.io/mlx-ruby/)
 
 ## Contributing
 

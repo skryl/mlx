@@ -7,6 +7,7 @@
 # - mlx/nn/* - Neural network modules and layers
 # - mlx/optimizers/* - Optimizers and learning rate schedulers
 
+require 'mlx/version'
 require 'mlx/core'
 
 # Neural network core
@@ -34,7 +35,7 @@ require 'mlx/nn/layers/upsample'
 
 # MLX main module
 module MLX
-  VERSION = '0.1.0'
+  # VERSION is defined in version.rb
   
   # Data types
   INT8 = :int8

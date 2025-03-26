@@ -3,12 +3,12 @@ require_relative 'lib/mlx/version'
 Gem::Specification.new do |spec|
   spec.name          = "mlx"
   spec.version       = MLX::VERSION
-  spec.authors       = ["Your Name"]
-  spec.email         = ["your.email@example.com"]
+  spec.authors       = ["Aleksey Skryl"]
+  spec.email         = ["aleksey.skryl@gmail.com"]
 
   spec.summary       = "Ruby bindings for Apple's MLX framework"
   spec.description   = "Ruby bindings for MLX, a framework for machine learning on Apple Silicon"
-  spec.homepage      = "https://github.com/yourusername/mlx-ruby"
+  spec.homepage      = "https://github.com/skryl/mlx-ruby"
   spec.license       = "MIT"
   spec.required_ruby_version = Gem::Requirement.new(">= 2.7.0")
 
