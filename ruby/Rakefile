@@ -1,0 +1,16 @@
+require "bundler/gem_tasks"
+require "rake/testtask"
+require "rake/extensiontask"
+
+Rake::TestTask.new(:test) do |t|
+  t.libs << "tests"
+  t.libs << "lib"
+  t.test_files = FileList["tests/**/*_test.rb", "tests/**/test_*.rb"]
+end
+
+Rake::ExtensionTask.new("mlx") do |ext|
+  ext.lib_dir = "lib/mlx"
+  ext.ext_dir = "ext/mlx"
+end
+
+task :default => [:compile, :test] 
