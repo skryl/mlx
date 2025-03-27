@@ -3,6 +3,9 @@
 #include "mlx/ops.h"
 #include "mlx_func.h"
 
+// Add einsum header if not already included
+#include "mlx/einsum.h"
+
 namespace mx = mlx::core;
 
 // ---------------------------------------------------------------------------
