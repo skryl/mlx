@@ -66,17 +66,6 @@ module MLX
     def self.nan; Constants.nan; end
     def self.newaxis; Constants.newaxis; end
     
-    # Device module - implemented in device.cpp
-    module Device
-      CPU = :cpu
-      GPU = :gpu
-      
-      # These module methods will be overridden by the native extension
-      def self.default_device; "cpu"; end
-      def self.set_default_device(device); end
-      def self.sync_device(device = nil); end
-      def self.devices; []; end
-    end
     
     # Random module - implemented in random.cpp
     module Random
@@ -94,15 +83,6 @@ module MLX
       def self.gumbel(key, shape, dtype = FLOAT32); Array.new; end
       def self.laplace(key, shape, dtype = FLOAT32); Array.new; end
       def self.permutation(key, x); Array.new; end
-    end
-    
-    # Stream module - implemented in stream.cpp
-    module Stream
-      def self.synchronize; end
-      def self.default_stream; nil; end
-      def self.set_default_stream(stream); end
-      def self.new_stream; nil; end
-      def self.stream; nil; end
     end
     
     # Metal module - implemented in metal.cpp
@@ -136,14 +116,6 @@ module MLX
       def self.irfftn(arr, s = nil, axes = nil); arr; end
     end
     
-    # Distributed module - implemented in distributed.cpp
-    module Distributed
-      def self.initialize(communication_key, world_size, rank); end
-      def self.is_initialized; false; end
-      def self.world_size; 1; end
-      def self.rank; 0; end
-    end
-    
     # Fast module - implemented in fast.cpp
     module Fast
       def self.gemm(a, b, c, transpose_a = false, transpose_b = false); c; end
@@ -174,7 +146,41 @@ module MLX
     
     # Ops module - implemented in ops.cpp
     module Ops
-      # Placeholder for ops module
+      # Array creation operations
+      def self.zeros(shape, dtype = nil, stream = nil); end
+      def self.ones(shape, dtype = nil, stream = nil); end
+      def self.full(shape, fill_value, dtype = nil, stream = nil); end
+      def self.arange(start, stop, step = 1, dtype = nil, stream = nil); end
+      def self.identity(n, dtype = nil, stream = nil); end
+      def self.eye(n, m = nil, k = 0, dtype = nil, stream = nil); end
+      
+      # Array manipulation operations
+      def self.reshape(arr, shape, stream = nil); end
+      def self.flatten(arr, start_axis = 0, end_axis = -1, stream = nil); end
+      def self.squeeze(arr, axis = nil, stream = nil); end
+      def self.expand_dims(arr, axis, stream = nil); end
+      
+      # Element-wise operations
+      def self.abs(x, stream = nil); end
+      def self.sign(x, stream = nil); end
+      def self.negative(x, stream = nil); end
+      
+      # Basic operations
+      def self.add(x, y, stream = nil); end
+      def self.subtract(x, y, stream = nil); end
+      def self.multiply(x, y, stream = nil); end
+      def self.divide(x, y, stream = nil); end
+      
+      # Comparison operations
+      def self.equal(x, y, stream = nil); end
+      def self.not_equal(x, y, stream = nil); end
+      def self.greater(x, y, stream = nil); end
+      def self.greater_equal(x, y, stream = nil); end
+      def self.less(x, y, stream = nil); end
+      def self.less_equal(x, y, stream = nil); end
+      
+      # Gradient operations
+      def self.stop_gradient(arr, stream = nil); end
     end
     
     # Transforms module - implemented in transforms.cpp
@@ -281,6 +287,156 @@ module MLX
       def self.lu_factor(a, stream = nil); [arr, arr]; end
     end
     
+    # Device module - implemented in device.cpp
+    class Device
+      CPU = :cpu
+      GPU = :gpu
+
+      def self.default_device
+        # Implementation in C++
+      end
+
+      def self.set_default_device(device)
+        # Implementation in C++
+      end
+
+      def self.sync_device
+        # Implementation in C++
+      end
+
+      def self.devices
+        # Implementation in C++
+      end
+
+      def initialize(device_type = nil)
+        @device_type = device_type || self.class.default_device
+      end
+      
+      def type
+        @device_type
+      end
+      
+      def to_s
+        "Device(#{@device_type})"
+      end
+      
+      def ==(other)
+        other.is_a?(Device) && @device_type == other.type
+      end
+    end
+
+
+    # Distributed module - implemented in distributed.cpp
+    class Group
+      def self.is_available
+        # Implementation in C++
+      end
+
+      def self.init(*args)
+        # Implementation in C++
+      end
+
+      def self.all_sum(*args)
+        # Implementation in C++
+      end
+
+      def self.all_gather(*args)
+        # Implementation in C++
+      end
+
+      def self.send(*args)
+        # Implementation in C++
+      end
+
+      def self.recv(*args)
+        # Implementation in C++
+      end
+
+      def self.recv_like(*args)
+        # Implementation in C++
+      end
+
+      def initialize(rank, size)
+        @rank = rank
+        @size = size
+      end
+      
+      def rank
+        @rank
+      end
+      
+      def size
+        @size
+      end
+      
+      def split(color, key)
+        # Implementation in C++
+      end
+    end
+
+
+    # Stream module - implemented in stream.cpp
+    class Stream
+      def self.default_stream(device = nil)
+        # Implementation in C++
+      end
+
+      def self.set_default_stream(stream)
+        # Implementation in C++
+      end
+
+      def self.new_stream(device = nil)
+        # Implementation in C++
+      end
+
+      def self.synchronize(*args)
+        # Implementation in C++
+      end
+
+      def self.stream(device = nil)
+        # Implementation in C++
+      end
+
+      def initialize(device = nil)
+        @device = device || Device.default_device
+      end
+      
+      def synchronize
+        # Implementation in C++
+      end
+      
+      def device
+        @device
+      end
+      
+      def ==(other)
+        other.is_a?(Stream) && @device == other.device
+      end
+      
+      def inspect
+        "Stream(#{@device})"
+      end
+    end
+
+
+    class StreamContext
+      def self.create_stream_context(stream = nil)
+        # Implementation in C++
+      end
+
+      def initialize(stream)
+        @stream = stream
+      end
+      
+      def enter
+        # Implementation in C++
+      end
+      
+      # def exit(status = nil, error = nil, info = nil)
+      #   # Implementation in C++
+      # end
+    end
+
     # Array class - implemented in array.cpp
     class Array
       attr_reader :shape, :dtype
@@ -298,38 +454,6 @@ module MLX
       
       def inspect
         to_s
-      end
-      
-      # The following methods are defined in the native extension
-      # and will override these placeholders when loaded
-      
-      # Factory methods
-      def self.zeros(shape, dtype: FLOAT32)
-        new(nil, dtype: dtype, shape: shape)
-      end
-      
-      def self.ones(shape, dtype: FLOAT32)
-        new(nil, dtype: dtype, shape: shape)
-      end
-      
-      def self.full(shape, fill_value, dtype: FLOAT32)
-        new(nil, dtype: dtype, shape: shape)
-      end
-      
-      # Added arange class method
-      def self.arange(start, stop = nil, step = 1, dtype: nil)
-        # Handle case where only stop is provided
-        if stop.nil?
-          stop = start
-          start = 0
-        end
-        
-        # Calculate the array shape
-        length = ((stop - start) / step.to_f).ceil
-        
-        # Create array with values
-        data = (0...length).map { |i| start + i * step }
-        new(data, dtype: dtype)
       end
       
       # Basic properties
@@ -426,311 +550,9 @@ module MLX
       def >=(other); self; end
     end
     
-    # Create factory methods at the module level
-    def self.zeros(shape, dtype = FLOAT32)
-      Array.zeros(shape, dtype: dtype)
-    end
-    
-    def self.ones(shape, dtype = FLOAT32)
-      Array.ones(shape, dtype: dtype)
-    end
-    
-    def self.full(shape, fill_value, dtype = FLOAT32)
-      Array.full(shape, fill_value, dtype: dtype)
-    end
-  end
-  
-  # Set up aliases at the top level
-  Array = Core::Array
-  
-  # Define dtype constants at the top level
-  BOOL = Core::BOOL
-  UINT8 = Core::UINT8
-  UINT16 = Core::UINT16
-  UINT32 = Core::UINT32
-  UINT64 = Core::UINT64
-  INT8 = Core::INT8
-  INT16 = Core::INT16
-  INT32 = Core::INT32
-  INT64 = Core::INT64
-  FLOAT16 = Core::FLOAT16
-  FLOAT32 = Core::FLOAT32
-  BFLOAT16 = Core::BFLOAT16
-  FLOAT64 = Core::FLOAT64
-  COMPLEX64 = Core::COMPLEX64
-  
-  # Type hierarchy constants at the top level
-  COMPLEXFLOATING = Core::COMPLEXFLOATING
-  FLOATING = Core::FLOATING
-  INEXACT = Core::INEXACT
-  SIGNEDINTEGER = Core::SIGNEDINTEGER
-  UNSIGNEDINTEGER = Core::UNSIGNEDINTEGER
-  INTEGER = Core::INTEGER
-  NUMBER = Core::NUMBER
-  GENERIC = Core::GENERIC
-  
-  # Device constants at the top level
-  CPU = :cpu
-  GPU = :gpu
-  
-  # Additional top-level modules
-  Stream = Core::Stream
-  Distributed = Core::Distributed
-  Fast = Core::Fast
-  FFT = Core::FFT
-  Random = Core::Random
-  Linalg = Core::Linalg
-  Utils = Core::Utils
-  
-  # Access to mathematical constants
-  def self.pi; Core.pi; end
-  def self.e; Core.e; end
-  def self.euler_gamma; Core.euler_gamma; end
-  def self.inf; Core.inf; end
-  def self.nan; Core.nan; end
-  def self.newaxis; Core.newaxis; end
-  
-  # Top-level convenience methods
-  
-  # Factory method for creating arrays
-  def self.array(data, dtype = nil)
-    arr = Array.new(data)
-    # Apply dtype conversion if specified
-    if dtype
-      Core::Convert.to_type(arr, dtype)
-    else
-      arr
-    end
-  end
-  
-  # Creation methods
-  def self.zeros(shape, dtype = FLOAT32)
-    Core.zeros(shape, dtype)
-  end
-  
-  def self.ones(shape, dtype = FLOAT32)
-    Core.ones(shape, dtype)
-  end
-  
-  def self.full(shape, fill_value, dtype = FLOAT32)
-    Core.full(shape, fill_value, dtype)
-  end
-  
-  def self.arange(start, stop = nil, step = 1, dtype = nil)
-    # Handle case where only stop is provided
-    if stop.nil?
-      stop = start
-      start = 0
-    end
-    
-    # Calculate the array shape
-    length = ((stop - start) / step.to_f).ceil
-    
-    # Create array with values
-    data = (0...length).map { |i| start + i * step }
-    array(data, dtype)
-  end
-  
-  def self.linspace(start, stop, num = 50, dtype = FLOAT32)
-    step = (stop - start) / (num - 1).to_f
-    data = (0...num).map { |i| start + i * step }
-    array(data, dtype)
-  end
-  
-  def self.eye(n, m = nil, k = 0, dtype = FLOAT32)
-    m ||= n
-    data = Array.new(n) { |i| Array.new(m) { |j| (j - i == k) ? 1 : 0 } }
-    array(data, dtype)
-  end
-  
-  def self.identity(n, dtype = FLOAT32)
-    eye(n, dtype: dtype)
-  end
-  
-  # Convenience methods for existing arrays
-  def self.zeros_like(arr, dtype = nil)
-    dtype ||= arr.dtype
-    zeros(arr.shape, dtype)
-  end
-  
-  def self.ones_like(arr, dtype = nil)
-    dtype ||= arr.dtype
-    ones(arr.shape, dtype)
-  end
-  
-  def self.full_like(arr, fill_value, dtype = nil)
-    dtype ||= arr.dtype
-    full(arr.shape, fill_value, dtype)
-  end
-  
-  # Random array creation
-  def self.random_uniform(shape, dtype = FLOAT32)
-    key = Random.key
-    Random.uniform(key, shape, dtype)
-  end
-  
-  def self.random_normal(shape, dtype = FLOAT32)
-    key = Random.key
-    Random.normal(key, shape, dtype)
-  end
-  
-  # Device management
-  def self.device
-    Core::Device.default_device
-  end
-  
-  def self.set_default_device(device)
-    Core::Device.set_default_device(device)
-  end
-  
-  def self.sync(device = nil)
-    Core::Device.sync_device(device)
-  end
-  
-  # Memory management
-  def self.memory_stats
-    Core::Memory.info
-  end
-  
-  # Array inspection
-  def self.print(arr)
-    puts arr.to_s
-  end
-  
-  def self.to_ruby(arr)
-    arr.tolist
-  end
-  
-  # Array operations
-  def self.add(a, b); a + b; end
-  def self.subtract(a, b); a - b; end
-  def self.multiply(a, b); a * b; end
-  def self.divide(a, b); a / b; end
-  def self.power(a, b); a ** b; end
-  def self.negative(a); -a; end
-  
-  # Element-wise math
-  def self.exp(a); a.exp; end
-  def self.log(a); a.log; end
-  def self.sigmoid(a); Core::Math.sigmoid(a); end
-  def self.tanh(a); Core::Math.tanh(a); end
-  def self.sin(a); a.sin; end
-  def self.cos(a); a.cos; end
-  def self.sqrt(a); a.sqrt; end
-  def self.abs(a); a.abs; end
-  
-  # Clipping
-  def self.clip(a, min_val, max_val)
-    a.maximum(min_val).minimum(max_val)
-  end
-  
-  # Reductions
-  def self.sum(a, axis = nil, keepdims = false); a.sum(axis, keepdims); end
-  def self.mean(a, axis = nil, keepdims = false); a.mean(axis, keepdims); end
-  def self.max(a, axis = nil, keepdims = false); a.max(axis, keepdims); end
-  def self.min(a, axis = nil, keepdims = false); a.min(axis, keepdims); end
-  def self.argmax(a, axis = nil, keepdims = false); a.argmax(axis, keepdims); end
-  def self.argmin(a, axis = nil, keepdims = false); a.argmin(axis, keepdims); end
-  
-  # Comparison
-  def self.equal(a, b); a == b; end
-  def self.not_equal(a, b); a != b; end
-  def self.greater(a, b); a > b; end
-  def self.greater_equal(a, b); a >= b; end
-  def self.less(a, b); a < b; end
-  def self.less_equal(a, b); a <= b; end
-  def self.maximum(a, b); a.maximum(b); end
-  def self.minimum(a, b); a.minimum(b); end
-  
-  # Logical
-  def self.logical_and(a, b); a & b; end
-  def self.logical_or(a, b); a | b; end
-  def self.logical_not(a); ~a; end
-  def self.where(condition, x, y); condition.where(x, y); end
-  
-  # Linear algebra
-  def self.matmul(a, b); a.matmul(b); end
-  def self.dot(a, b); a.dot(b); end
-  def self.vdot(a, b); a.vdot(b); end
-  def self.norm(a, ord = nil, axis = nil, keepdims = false); Core::Linalg.norm(a, ord, axis, keepdims); end
-  def self.svd(a, compute_uv = true); Core::Linalg.svd(a, compute_uv); end
-  def self.det(a); Core::Linalg.det(a); end
-  def self.inv(a); Core::Linalg.inv(a); end
-  def self.pinv(a, rcond = 1e-15); Core::Linalg.pinv(a, rcond); end
-  def self.solve(a, b); Core::Linalg.solve(a, b); end
-  
-  # Transformations
-  def self.reshape(a, shape); a.reshape(shape); end
-  def self.transpose(a, axes = nil); a.transpose(axes); end
-  def self.concatenate(arrays, axis = 0); Core::Transforms.concatenate(arrays, axis); end
-  def self.stack(arrays, axis = 0); Core::Transforms.stack(arrays, axis); end
-  def self.split(a, indices_or_sections, axis = 0); a.split(indices_or_sections, axis); end
-  def self.pad(a, padding, mode = :constant, value = 0); Core::Transforms.pad(a, padding, mode, value); end
-  def self.squeeze(a, axes = nil); a.squeeze(axes); end
-  def self.expand_dims(a, axis); Core::Transforms.expand_dims(a, axis); end
-  
-  # Indexing
-  def self.slice(a, start_indices, lengths, strides = nil)
-    Core::Indexing.slice(a, start_indices, lengths, strides)
-  end
-  
-  def self.gather(a, indices, axis = nil)
-    Core::Indexing.gather(a, indices, axis)
-  end
-  
-  # Neural network related functions
-  def self.softmax(x, axis = -1); x; end
-  def self.log_softmax(x, axis = -1); x; end
-  def self.one_hot(indices, num_classes); indices; end
-  def self.dropout(x, rate, training = true); x; end
-  
-  # Neural network layers
-  def self.conv1d(x, weight, bias = nil, stride = 1, padding = 0, dilation = 1, groups = 1); x; end
-  def self.conv2d(x, weight, bias = nil, stride = 1, padding = 0, dilation = 1, groups = 1); x; end
-  def self.conv3d(x, weight, bias = nil, stride = 1, padding = 0, dilation = 1, groups = 1); x; end
-  
-  # Pooling layers
-  def self.max_pool1d(x, kernel_size, stride = nil, padding = 0); x; end
-  def self.max_pool2d(x, kernel_size, stride = nil, padding = 0); x; end
-  def self.max_pool3d(x, kernel_size, stride = nil, padding = 0); x; end
-  def self.avg_pool1d(x, kernel_size, stride = nil, padding = 0); x; end
-  def self.avg_pool2d(x, kernel_size, stride = nil, padding = 0); x; end
-  def self.avg_pool3d(x, kernel_size, stride = nil, padding = 0); x; end
-  
-  # Linear algebra functions
-  def self.triu(x, k = 0); x; end
-  def self.tril(x, k = 0); x; end
-  def self.diag(x, k = 0); x.diag(k); end
-  def self.diag_part(x, k = 0); x; end
-  
-  # Save/load
-  def self.save(path, arrays, compression = false)
-    Core::Load.save(path, arrays, compression)
-  end
-  
-  def self.load(path, arrays = nil, device = nil)
-    Core::Load.load(path, arrays, device)
-  end
-
-  # NN module for neural networks - will be expanded later
-  module NN
-    module Init
-      # Initialization functions
-    end
-
-    module Layers
-      # Layer implementations
-    end
-
-    module Loss
-      # Loss functions
-    end
-
-    module Ops
-      # Neural network operations
-    end
   end
 end
+  
 
 # Try to load the native extension if available
 begin
