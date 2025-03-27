@@ -1046,30 +1046,34 @@ static VALUE ops_einsum(int argc, VALUE* argv, VALUE self) {
 }
 
 static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
-  if (argc < 3 || argc > 4) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 3..4)", argc);
+  if (argc < 2 || argc > 4) {
+    rb_raise(rb_eArgError, "roll: wrong number of arguments (given %d, expected 2..4)", argc);
   }
   
   VALUE arr = argv[0];
-  VALUE shift = argv[1];
-  VALUE axes = argv[2];
-  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  VALUE shift_val = argv[1];
+  VALUE axis_val = Qnil;
+  VALUE stream_val = Qnil;
+
+  if (argc >= 3) axis_val = argv[2];
+  if (argc == 4) stream_val = argv[3];
   
   mx::array& a = get_array(arr);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  // Initialize with a default value - using float32 zero as placeholder
+  mx::array result = mx::zeros({1}, mx::float32);
   
-  if (RB_TYPE_P(shift, T_FIXNUM) && RB_TYPE_P(axes, T_FIXNUM)) {
+  if (RB_TYPE_P(shift_val, T_FIXNUM) && RB_TYPE_P(axis_val, T_FIXNUM)) {
     // Single shift, single axis
-    int shift_val = NUM2INT(shift);
-    int axis_val = NUM2INT(axes);
-    result = mx::roll(a, shift_val, axis_val, stream);
-  } else if (RB_TYPE_P(shift, T_ARRAY) && RB_TYPE_P(axes, T_ARRAY)) {
+    int shift = NUM2INT(shift_val);
+    int axis = NUM2INT(axis_val);
+    result = mx::roll(a, shift, axis, stream);
+  } else if (RB_TYPE_P(shift_val, T_ARRAY) && RB_TYPE_P(axis_val, T_ARRAY)) {
     // Multiple shifts, multiple axes
-    std::vector<int> shifts = ruby_array_to_shape(shift);
-    std::vector<int> axis_vals = ruby_array_to_shape(axes);
-    result = mx::roll(a, shifts, axis_vals, stream);
+    std::vector<int> shifts = ruby_array_to_shape(shift_val);
+    std::vector<int> axes = ruby_array_to_shape(axis_val);
+    result = mx::roll(a, shifts, axes, stream);
   } else {
     rb_raise(rb_eTypeError, "shift and axes must be both integers or both arrays");
   }
@@ -1191,17 +1195,20 @@ static VALUE ops_slice_update(int argc, VALUE* argv, VALUE self) {
 }
 
 static VALUE ops_contiguous(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1 || argc > 2) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  if (argc < 1 || argc > 3) {
+    rb_raise(rb_eArgError, "contiguous: wrong number of arguments (given %d, expected 1..3)", argc);
   }
   
-  VALUE arr = argv[0];
-  VALUE stream_val = (argc > 1) ? argv[1] : Qnil;
+  mx::array& a = get_array(argv[0]);
+  bool allow_col_major = false;
+  VALUE stream_val = Qnil;
   
-  mx::array& a = get_array(arr);
+  if (argc >= 2) allow_col_major = (argv[1] == Qtrue);
+  if (argc == 3) stream_val = argv[2];
+  
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+  mx::array result = mx::contiguous(a, allow_col_major, stream);
   
-  mx::array result = mx::contiguous(a, stream);
   return wrap_array(result);
 }
 // unflatten(a, axis, shape, stream=None)
@@ -1225,8 +1232,9 @@ static VALUE ops_divmod(int argc, VALUE* argv, VALUE self) {
   SCALAR_OR_ARRAY(b, argv[1]);
   GET_STREAM(stream, (argc == 3) ? argv[2] : Qnil);
   
-  // divmod doesn't return a vector - it returns a tuple of (quotient, remainder)
-  rb_raise(rb_eNotImpError, "divmod not fully implemented in this example");
+  // For simplicity, let's just raise not implemented error for now
+  // since we're not sure of the exact return type
+  rb_raise(rb_eNotImpError, "divmod not implemented in this example");
   return Qnil;
 }
 
@@ -3111,7 +3119,7 @@ static VALUE ops_einsum(int argc, VALUE* argv, VALUE self) {
 // roll(a, shift, axis=None, stream=None)
 static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
   if (argc < 2 || argc > 4) {
-    rb_raise(rb_eArgError, "roll: wrong number of args (given %d, expected 2..4)", argc);
+    rb_raise(rb_eArgError, "roll: wrong number of arguments (given %d, expected 2..4)", argc);
   }
   mx::array& arr = get_array(argv[0]);
   VALUE shift_val = argv[1];
@@ -3120,47 +3128,28 @@ static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
 
   if (argc >= 3) axis_val = argv[2];
   if (argc == 4) stream_val = argv[3];
-  GET_STREAM(stream, stream_val);
-
-  // parse shift as int or array-of-ints
-  std::vector<int> ax;
-  // If axis_val not nil, parse similarly
-  // We'll do minimal handling:
-  int shift = 0;
-  if (FIXNUM_P(shift_val)) {
-    shift = NUM2INT(shift_val);
-    if (NIL_P(axis_val)) {
-      RETURN_ARRAY(mx::roll(arr, shift, stream));
-    } else {
-      // parse axis
-      if (FIXNUM_P(axis_val)) {
-        int a = NUM2INT(axis_val);
-        RETURN_ARRAY(mx::roll(arr, shift, a, stream));
-      } else if (RB_TYPE_P(axis_val, T_ARRAY)) {
-        std::vector<int> axes = ruby_array_to_shape(axis_val);
-        RETURN_ARRAY(mx::roll(arr, shift, axes, stream));
-      } else {
-        rb_raise(rb_eTypeError, "roll: axis must be int or array of int");
-      }
-    }
-  } else if (RB_TYPE_P(shift_val, T_ARRAY)) {
-    // multi shift
-    std::vector<int> sh = ruby_array_to_shape(shift_val);
-    if (NIL_P(axis_val)) {
-      RETURN_ARRAY(mx::roll(arr, sh, stream));
-    } else {
-      if (FIXNUM_P(axis_val)) {
-        int a = NUM2INT(axis_val);
-        RETURN_ARRAY(mx::roll(arr, sh, a, stream));
-      } else {
-        std::vector<int> axes = ruby_array_to_shape(axis_val);
-        RETURN_ARRAY(mx::roll(arr, sh, axes, stream));
-      }
-    }
+  
+  mx::array& a = get_array(arr);
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+  
+  // Initialize with a default value - using float32 zero as placeholder
+  mx::array result = mx::zeros({1}, mx::float32);
+  
+  if (RB_TYPE_P(shift_val, T_FIXNUM) && RB_TYPE_P(axis_val, T_FIXNUM)) {
+    // Single shift, single axis
+    int shift = NUM2INT(shift_val);
+    int axis = NUM2INT(axis_val);
+    result = mx::roll(a, shift, axis, stream);
+  } else if (RB_TYPE_P(shift_val, T_ARRAY) && RB_TYPE_P(axis_val, T_ARRAY)) {
+    // Multiple shifts, multiple axes
+    std::vector<int> shifts = ruby_array_to_shape(shift_val);
+    std::vector<int> axes = ruby_array_to_shape(axis_val);
+    result = mx::roll(a, shifts, axes, stream);
   } else {
-    rb_raise(rb_eTypeError, "roll: shift must be int or array of int");
+    rb_raise(rb_eTypeError, "shift and axes must be both integers or both arrays");
   }
-  return Qnil; // unreachable
+  
+  return wrap_array(result);
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3211,16 +3200,19 @@ static VALUE ops_slice_update(int argc, VALUE* argv, VALUE self) {
 // contiguous(a, allow_col_major=false, stream=None)
 static VALUE ops_contiguous(int argc, VALUE* argv, VALUE self) {
   if (argc < 1 || argc > 3) {
-    rb_raise(rb_eArgError, "contiguous: wrong number of args (given %d, expected 1..3)", argc);
+    rb_raise(rb_eArgError, "contiguous: wrong number of arguments (given %d, expected 1..3)", argc);
   }
-  mx::array& a = get_array(argv[0]);
-  bool allow_col = false;
-  VALUE stream_val = Qnil;
-  if (argc >= 2) allow_col = (argv[1] == Qtrue);
-  if (argc == 3) stream_val = argv[2];
-  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result = mx::contiguous(a, allow_col, stream);
+  mx::array& a = get_array(argv[0]);
+  bool allow_col_major = false;
+  VALUE stream_val = Qnil;
+  
+  if (argc >= 2) allow_col_major = (argv[1] == Qtrue);
+  if (argc == 3) stream_val = argv[2];
+  
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+  mx::array result = mx::contiguous(a, allow_col_major, stream);
+  
   return wrap_array(result);
 }
 
