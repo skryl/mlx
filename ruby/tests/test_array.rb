@@ -82,15 +82,15 @@ class TestArray < MLXTestCase
     c = MLX.array([1, 2, 4])
     
     # Test equality operators
-    assert MLX.all(a == b).item
-    refute MLX.all(a == c).item
-    assert MLX.any(a != c).item
-    refute MLX.any(a != b).item
+    assert a.all(a == b).item
+    refute a.all(a == c).item
+    assert a.any(a != c).item
+    refute a.any(a != b).item
     
     # Test equality with scalar
-    assert MLX.any(a == 1).item
-    refute MLX.all(a == 1).item
-    assert MLX.all(a != 5).item
+    assert a.any(a == 1).item
+    refute a.all(a == 1).item
+    assert a.all(a != 5).item
   end
   
   def test_array_comparison
@@ -98,34 +98,34 @@ class TestArray < MLXTestCase
     b = MLX.array([0, 2, 4])
     
     # Test comparison operators
-    assert MLX.any(a > b).item
-    assert MLX.any(a < b).item
-    assert MLX.any(a >= b).item
-    assert MLX.any(a <= b).item
+    assert a.any(a > b).item
+    assert a.any(a < b).item
+    assert a.any(a >= b).item
+    assert a.any(a <= b).item
     
     # With scalars
-    assert MLX.all(a > 0).item
-    assert MLX.all(a < 10).item
-    assert MLX.any(a == 2).item
-    assert MLX.all(a >= 1).item
-    assert MLX.all(a <= 3).item
+    assert a.all(a > 0).item
+    assert a.all(a < 10).item
+    assert a.any(a == 2).item
+    assert a.all(a >= 1).item
+    assert a.all(a <= 3).item
   end
   
   def test_array_reshaping
     a = MLX.array([1, 2, 3, 4, 5, 6])
     
     # Test reshape
-    b = MLX.reshape(a, [2, 3])
+    b = a.reshape([2, 3])
     assert_equal [2, 3], b.shape
     
     # Test transpose
-    c = MLX.reshape(a, [3, 2])
-    d = MLX.transpose(c)
+    c = a.reshape([3, 2])
+    d = c.transpose
     assert_equal [2, 3], d.shape
     
     # Test flatten
-    e = MLX.reshape(a, [2, 3])
-    f = MLX.reshape(e, [-1])
+    e = a.reshape([2, 3])
+    f = e.flatten
     assert_equal [6], f.shape
   end
   
@@ -156,24 +156,24 @@ class TestArray < MLXTestCase
     a = MLX.array([1, 2, 3, 4])
     
     # Test abs
-    assert_array_equal(MLX.abs(MLX.array([-1, -2, 3, -4])), [1, 2, 3, 4])
+    assert_array_equal(MLX.array([-1, -2, 3, -4]).abs, [1, 2, 3, 4])
     
     # Test sqrt
-    assert_array_equal(MLX.sqrt(a), [1, 1.4142, 1.7321, 2], atol: 1e-4)
+    assert_array_equal(a.sqrt, [1, 1.4142, 1.7321, 2], atol: 1e-4)
     
     # Test exp
-    exp_result = MLX.exp(MLX.array([0, 1, 2]))
+    exp_result = MLX.array([0, 1, 2]).exp
     assert_array_equal(exp_result, [1, 2.7183, 7.3891], atol: 1e-4)
     
     # Test log
-    log_result = MLX.log(MLX.array([1, 2, 10]))
+    log_result = MLX.array([1, 2, 10]).log
     assert_array_equal(log_result, [0, 0.6931, 2.3026], atol: 1e-4)
     
     # Test sin, cos
-    sin_result = MLX.sin(MLX.array([0, Math::PI/2, Math::PI]))
+    sin_result = MLX.array([0, Math::PI/2, Math::PI]).sin
     assert_array_equal(sin_result, [0, 1, 0], atol: 1e-4)
     
-    cos_result = MLX.cos(MLX.array([0, Math::PI/2, Math::PI]))
+    cos_result = MLX.array([0, Math::PI/2, Math::PI]).cos
     assert_array_equal(cos_result, [1, 0, -1], atol: 1e-4)
   end
   
@@ -181,26 +181,26 @@ class TestArray < MLXTestCase
     a = MLX.array([[1, 2, 3], [4, 5, 6]])
     
     # Test sum
-    assert_equal 21, MLX.sum(a).item
-    assert_array_equal(MLX.sum(a, axis: 0), [5, 7, 9])
-    assert_array_equal(MLX.sum(a, axis: 1), [6, 15])
+    assert_equal 21, a.sum.item
+    assert_array_equal(a.sum(axis: 0), [5, 7, 9])
+    assert_array_equal(a.sum(axis: 1), [6, 15])
     
     # Test mean
-    assert_equal 3.5, MLX.mean(a).item
-    assert_array_equal(MLX.mean(a, axis: 0), [2.5, 3.5, 4.5])
-    assert_array_equal(MLX.mean(a, axis: 1), [2, 5])
+    assert_equal 3.5, a.mean.item
+    assert_array_equal(a.mean(axis: 0), [2.5, 3.5, 4.5])
+    assert_array_equal(a.mean(axis: 1), [2, 5])
     
     # Test min/max
-    assert_equal 1, MLX.min(a).item
-    assert_equal 6, MLX.max(a).item
-    assert_array_equal(MLX.min(a, axis: 0), [1, 2, 3])
-    assert_array_equal(MLX.max(a, axis: 1), [3, 6])
+    assert_equal 1, a.min.item
+    assert_equal 6, a.max.item
+    assert_array_equal(a.min(axis: 0), [1, 2, 3])
+    assert_array_equal(a.max(axis: 1), [3, 6])
     
     # Test argmin/argmax
-    assert_equal 0, MLX.argmin(a).item
-    assert_equal 5, MLX.argmax(a).item
-    assert_array_equal(MLX.argmin(a, axis: 0), [0, 0, 0])
-    assert_array_equal(MLX.argmax(a, axis: 1), [2, 2])
+    assert_equal 0, a.argmin.item
+    assert_equal 5, a.argmax.item
+    assert_array_equal(a.argmin(axis: 0), [0, 0, 0])
+    assert_array_equal(a.argmax(axis: 1), [2, 2])
   end
   
   def test_array_logical
@@ -208,39 +208,39 @@ class TestArray < MLXTestCase
     b = MLX.array([true, true, false])
     
     # Test logical operations
-    assert_array_equal(MLX.logical_and(a, b), [true, false, false])
-    assert_array_equal(MLX.logical_or(a, b), [true, true, true])
-    assert_array_equal(MLX.logical_not(a), [false, true, false])
-    assert_array_equal(MLX.logical_xor(a, b), [false, true, true])
+    assert_array_equal(a.&(b), [true, false, false])
+    assert_array_equal(a.|(b), [true, true, true])
+    assert_array_equal(a.!, [false, true, false])
+    assert_array_equal(a.^(b), [false, true, true])
     
     # Test all and any
-    assert MLX.any(a).item
-    refute MLX.all(a).item
-    assert MLX.any(b).item
-    refute MLX.all(b).item
+    assert a.any.item
+    refute a.all.item
+    assert b.any.item
+    refute b.all.item
   end
   
   def test_array_conversion
     # Test dtype conversion
     a = MLX.array([1, 2, 3], dtype: MLX::FLOAT32)
     
-    b = MLX.astype(a, MLX::INT32)
+    b = a.astype(MLX::INT32)
     assert_equal MLX::INT32, b.dtype
     assert_array_equal(b, [1, 2, 3])
     
-    c = MLX.astype(a, MLX::FLOAT16)
+    c = a.astype(MLX::FLOAT16)
     assert_equal MLX::FLOAT16, c.dtype
     assert_array_equal(c, [1, 2, 3])
     
     # Test to_list - if implemented
-    if a.respond_to?(:to_list)
-      assert_equal [1.0, 2.0, 3.0], a.to_list
+    if a.respond_to?(:tolist)
+      assert_equal [1.0, 2.0, 3.0], a.tolist
     end
   end
   
   def test_array_device
     # Only test if metal is available
-    if MLX.metal.is_available
+    if MLX.metal_is_available
       a = MLX.array([1, 2, 3])
       
       # Test device transformation
@@ -256,51 +256,51 @@ class TestArray < MLXTestCase
   def test_reshape
     # Test reshape on 1D array
     x = MLX.arange(6)
-    y = MLX.reshape(x, [2, 3])
+    y = x.reshape([2, 3])
     assert_equal [2, 3], y.shape
     assert MLX.array_equal(y, MLX.array([[0, 1, 2], [3, 4, 5]]))
     
     # Test reshape on 2D array
     x = MLX.array([[1, 2], [3, 4], [5, 6]])
-    y = MLX.reshape(x, [2, 3])
+    y = x.reshape([2, 3])
     assert_equal [2, 3], y.shape
     assert MLX.array_equal(y, MLX.array([[1, 2, 3], [4, 5, 6]]))
     
     # Test with -1 dimension
     x = MLX.arange(12)
-    y = MLX.reshape(x, [-1, 4])
+    y = x.reshape([-1, 4])
     assert_equal [3, 4], y.shape
     
     # Test with multiple -1 dimensions (should raise error)
     assert_raises(ValueError) do
-      MLX.reshape(x, [-1, -1])
+      x.reshape([-1, -1])
     end
     
     # Test preserving dtype
     x = MLX.array([1.0, 2.0, 3.0, 4.0])
-    y = MLX.reshape(x, [2, 2])
+    y = x.reshape([2, 2])
     assert_equal x.dtype, y.dtype
   end
   
   def test_transpose
     # Test basic transpose
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
-    y = MLX.transpose(x)
+    y = x.transpose
     assert_equal [3, 2], y.shape
     assert MLX.array_equal(y, MLX.array([[1, 4], [2, 5], [3, 6]]))
     
     # Test with specific axes
     x = MLX.reshape(MLX.arange(24), [2, 3, 4])
-    y = MLX.transpose(x, axes: [2, 0, 1])
+    y = x.transpose(axes: [2, 0, 1])
     assert_equal [4, 2, 3], y.shape
     
     # Test multiple permutations
-    z = MLX.transpose(y, axes: [1, 0, 2])
+    z = y.transpose(axes: [1, 0, 2])
     assert_equal [2, 4, 3], z.shape
     
     # Test that transposing twice with same axes gives original
     x = MLX.array([[1, 2], [3, 4]])
-    y = MLX.transpose(MLX.transpose(x))
+    y = x.transpose.transpose
     assert MLX.array_equal(x, y)
   end
   
@@ -392,23 +392,23 @@ class TestArray < MLXTestCase
   def test_squeeze
     # Test basic squeeze
     x = MLX.array([[[1], [2], [3]]])
-    y = MLX.squeeze(x)
+    y = x.squeeze
     assert_equal [3], y.shape
     assert MLX.array_equal(y, MLX.array([1, 2, 3]))
     
     # Test squeeze with specific axis
     x = MLX.array([[[1], [2], [3]]])
-    y = MLX.squeeze(x, axis: 2)
+    y = x.squeeze(axes: 2)
     assert_equal [1, 3], y.shape
     
     # Test squeeze on non-singleton dimension (should raise error)
     assert_raises(ValueError) do
-      MLX.squeeze(MLX.array([[1, 2], [3, 4]]), axis: 0)
+      MLX.array([[1, 2], [3, 4]]).squeeze(axes: 0)
     end
     
     # Test on array with no singleton dimensions
     x = MLX.array([[1, 2], [3, 4]])
-    y = MLX.squeeze(x)
+    y = x.squeeze
     assert_equal x.shape, y.shape
     assert MLX.array_equal(x, y)
   end
@@ -416,60 +416,60 @@ class TestArray < MLXTestCase
   def test_expand_dims
     # Test basic expand_dims
     x = MLX.array([1, 2, 3, 4])
-    y = MLX.expand_dims(x, axis: 0)
+    y = x.expand_dims(axis: 0)
     assert_equal [1, 4], y.shape
     assert MLX.array_equal(y, MLX.array([[1, 2, 3, 4]]))
     
     # Test expand_dims with axis=1
-    y = MLX.expand_dims(x, axis: 1)
+    y = x.expand_dims(axis: 1)
     assert_equal [4, 1], y.shape
     assert MLX.array_equal(y, MLX.array([[1], [2], [3], [4]]))
     
     # Test expand_dims with 2D input
     x = MLX.array([[1, 2], [3, 4]])
-    y = MLX.expand_dims(x, axis: 2)
+    y = x.expand_dims(axis: 2)
     assert_equal [2, 2, 1], y.shape
     
     # Test expand_dims with negative axis
-    y = MLX.expand_dims(x, axis: -1)
+    y = x.expand_dims(axis: -1)
     assert_equal [2, 2, 1], y.shape
     
     # Test multiple calls
-    z = MLX.expand_dims(MLX.expand_dims(x, axis: 0), axis: -1)
+    z = x.expand_dims(axis: 0).expand_dims(axis: -1)
     assert_equal [1, 2, 2, 1], z.shape
   end
   
   def test_permute_dims
     # Test basic permute_dims (equivalent to transpose)
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
-    y = MLX.permute_dims(x, axes: [1, 0])
+    y = MLX.transpose(x, axes: [1, 0])
     assert_equal [3, 2], y.shape
     assert MLX.array_equal(y, MLX.array([[1, 4], [2, 5], [3, 6]]))
     
     # Test with higher dimensions
     x = MLX.reshape(MLX.arange(24), [2, 3, 4])
-    y = MLX.permute_dims(x, axes: [2, 0, 1])
+    y = MLX.transpose(x, axes: [2, 0, 1])
     assert_equal [4, 2, 3], y.shape
   end
   
   def test_flip
     # Test 1D flip
     x = MLX.array([1, 2, 3, 4])
-    y = MLX.flip(x)
+    y = x.flip
     assert MLX.array_equal(y, MLX.array([4, 3, 2, 1]))
     
     # Test 2D flip along axis 0
     x = MLX.array([[1, 2], [3, 4]])
-    y = MLX.flip(x, axis: 0)
+    y = x.flip(axis: 0)
     assert MLX.array_equal(y, MLX.array([[3, 4], [1, 2]]))
     
     # Test 2D flip along axis 1
-    y = MLX.flip(x, axis: 1)
+    y = x.flip(axis: 1)
     assert MLX.array_equal(y, MLX.array([[2, 1], [4, 3]]))
     
     # Test higher dimensions
     x = MLX.reshape(MLX.arange(8), [2, 2, 2])
-    y = MLX.flip(x, axis: 0)
+    y = x.flip(axis: 0)
     assert MLX.array_equal(y[0], x[1])
     assert MLX.array_equal(y[1], x[0])
   end
@@ -546,7 +546,7 @@ class TestArray < MLXTestCase
     ]))
     
     # Test with custom value
-    y = MLX.pad(x, [[1, 1], [1, 1]], constant_value: 9)
+    y = MLX.pad(x, [[1, 1], [1, 1]], constant_values: 9)
     assert_equal [4, 4], y.shape
     assert MLX.array_equal(y, MLX.array([
       [9, 9, 9, 9],
@@ -565,24 +565,24 @@ class TestArray < MLXTestCase
   def test_swapaxes
     # Test basic swapaxes
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
-    y = MLX.swapaxes(x, 0, 1)
+    y = x.swapaxes(0, 1)
     assert_equal [3, 2], y.shape
     assert MLX.array_equal(y, MLX.array([[1, 4], [2, 5], [3, 6]]))
     
     # Test with higher dimensions
     x = MLX.reshape(MLX.arange(24), [2, 3, 4])
-    y = MLX.swapaxes(x, 0, 2)
+    y = x.swapaxes(0, 2)
     assert_equal [4, 3, 2], y.shape
     
     # Test that swapping twice gives original
-    z = MLX.swapaxes(MLX.swapaxes(x, 0, 1), 0, 1)
+    z = x.swapaxes(0, 1).swapaxes(0, 1)
     assert MLX.array_equal(x, z)
   end
   
   def test_moveaxis
     # Test basic moveaxis
     x = MLX.reshape(MLX.arange(24), [2, 3, 4])
-    y = MLX.moveaxis(x, 0, 2)
+    y = x.moveaxis(0, 2)
     assert_equal [3, 4, 2], y.shape
     
     # Test with multiple axes
@@ -590,14 +590,14 @@ class TestArray < MLXTestCase
     assert_equal [3, 2, 4], y.shape
     
     # Test moving to the same position
-    y = MLX.moveaxis(x, 0, 0)
+    y = x.moveaxis(0, 0)
     assert MLX.array_equal(x, y)
   end
   
   def test_diag
     # Test 1D to 2D diagonal
     x = MLX.array([1, 2, 3])
-    y = MLX.diag(x)
+    y = x.diag
     assert_equal [3, 3], y.shape
     assert MLX.array_equal(y, MLX.array([
       [1, 0, 0],
@@ -606,7 +606,7 @@ class TestArray < MLXTestCase
     ]))
     
     # Test with offset
-    y = MLX.diag(x, k: 1)
+    y = x.diag(k: 1)
     assert_equal [4, 4], y.shape
     assert MLX.array_equal(y, MLX.array([
       [0, 1, 0, 0],
@@ -617,12 +617,12 @@ class TestArray < MLXTestCase
     
     # Test 2D to 1D diagonal extraction
     x = MLX.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    y = MLX.diag(x)
+    y = x.diagonal
     assert_equal [3], y.shape
     assert MLX.array_equal(y, MLX.array([1, 5, 9]))
     
     # Test with offset
-    y = MLX.diag(x, k: -1)
+    y = x.diagonal(offset: -1)
     assert_equal [2], y.shape
     assert MLX.array_equal(y, MLX.array([4, 8]))
   end

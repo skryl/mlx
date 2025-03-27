@@ -257,6 +257,7 @@ module MLX
     def self.tile(x, reps); Core::Transforms.tile(x, reps); end
     def self.transpose(x, axes = nil); Core::Transforms.transpose(x, axes); end
     def self.value_and_grad(fn, *args); Core::Transforms.value_and_grad(fn, *args); end
+    def self.concatenate(arrays, axis = 0); Core::Transforms.concatenate(arrays, axis); end
     
     # Methods delegating to Core::Indexing
     def self.gather(x, indices, axis = nil); Core::Indexing.gather(x, indices, axis); end
