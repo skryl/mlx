@@ -2,7 +2,7 @@ module MLX
   module NN
     module Loss
       # Base class for all loss functions
-      class _Loss < MLX::NN::Module
+      class BaseLoss < MLX::NN::Module
         attr_reader :reduction
         
         def initialize(reduction: 'mean')
@@ -35,7 +35,7 @@ module MLX
       end
       
       # Mean Squared Error Loss: (x - y)^2
-      class MSELoss < _Loss
+      class MSELoss < BaseLoss
         def compute_loss(input, target)
           # Ensure same shape
           if input.shape != target.shape
@@ -48,7 +48,7 @@ module MLX
       end
       
       # Mean Absolute Error Loss: |x - y|
-      class L1Loss < _Loss
+      class L1Loss < BaseLoss
         def compute_loss(input, target)
           # Ensure same shape
           if input.shape != target.shape
@@ -61,7 +61,7 @@ module MLX
       end
       
       # Smooth L1 Loss (Huber Loss)
-      class SmoothL1Loss < _Loss
+      class SmoothL1Loss < BaseLoss
         attr_reader :beta
         
         def initialize(beta: 1.0, reduction: 'mean')
@@ -93,7 +93,7 @@ module MLX
       end
       
       # Binary Cross Entropy Loss: -[y*log(x) + (1-y)*log(1-x)]
-      class BCELoss < _Loss
+      class BCELoss < BaseLoss
         attr_reader :weight, :pos_weight
         
         def initialize(weight: nil, pos_weight: nil, reduction: 'mean')
@@ -138,7 +138,7 @@ module MLX
       end
       
       # Binary Cross Entropy with Logits Loss (combines sigmoid and BCE)
-      class BCEWithLogitsLoss < _Loss
+      class BCEWithLogitsLoss < BaseLoss
         attr_reader :weight, :pos_weight
         
         def initialize(weight: nil, pos_weight: nil, reduction: 'mean')
@@ -190,7 +190,7 @@ module MLX
       end
       
       # Cross Entropy Loss for classification
-      class CrossEntropyLoss < _Loss
+      class CrossEntropyLoss < BaseLoss
         attr_reader :weight, :ignore_index, :label_smoothing
         
         def initialize(weight: nil, ignore_index: -100, label_smoothing: 0.0, reduction: 'mean')
@@ -285,7 +285,7 @@ module MLX
       end
       
       # Kullback-Leibler Divergence Loss
-      class KLDivLoss < _Loss
+      class KLDivLoss < BaseLoss
         attr_reader :log_target
         
         def initialize(reduction: 'mean', log_target: false)
@@ -313,7 +313,7 @@ module MLX
       end
       
       # Negative Log Likelihood Loss
-      class NLLLoss < _Loss
+      class NLLLoss < BaseLoss
         attr_reader :weight, :ignore_index
         
         def initialize(weight: nil, ignore_index: -100, reduction: 'mean')
@@ -392,7 +392,7 @@ module MLX
       end
       
       # Hinge Loss (max margin loss)
-      class HingeLoss < _Loss
+      class HingeLoss < BaseLoss
         attr_reader :margin
         
         def initialize(margin: 1.0, reduction: 'mean')
@@ -414,7 +414,7 @@ module MLX
       end
       
       # Cosine Embedding Loss
-      class CosineEmbeddingLoss < _Loss
+      class CosineEmbeddingLoss < BaseLoss
         attr_reader :margin
         
         def initialize(margin: 0.0, reduction: 'mean')
@@ -450,7 +450,7 @@ module MLX
       end
       
       # Triplet Margin Loss
-      class TripletMarginLoss < _Loss
+      class TripletMarginLoss < BaseLoss
         attr_reader :margin, :p, :swap
         
         def initialize(margin: 1.0, p: 2, swap: false, reduction: 'mean')
@@ -484,7 +484,7 @@ module MLX
       end
       
       # Margin Ranking Loss
-      class MarginRankingLoss < _Loss
+      class MarginRankingLoss < BaseLoss
         attr_reader :margin
         
         def initialize(margin: 0.0, reduction: 'mean')
@@ -508,7 +508,7 @@ module MLX
       end
       
       # Focal Loss for imbalanced classification
-      class FocalLoss < _Loss
+      class FocalLoss < BaseLoss
         attr_reader :alpha, :gamma, :reduction
         
         def initialize(alpha: nil, gamma: 2.0, reduction: 'mean')
@@ -573,7 +573,7 @@ module MLX
       end
       
       # Multi-label Soft Margin Loss
-      class MultiLabelSoftMarginLoss < _Loss
+      class MultiLabelSoftMarginLoss < BaseLoss
         attr_reader :weight, :reduction
         
         def initialize(weight: nil, reduction: 'mean')

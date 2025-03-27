@@ -20,7 +20,7 @@ module MLX
             raise ArgumentError, "embed_dim must be divisible by num_heads"
           end
           
-          @head_dim = @embed_dim // @num_heads
+          @head_dim = @embed_dim / @num_heads
           @scaling = (@head_dim) ** -0.5
           
           # Define projection weight matrices

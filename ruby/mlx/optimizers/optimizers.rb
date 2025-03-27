@@ -953,7 +953,7 @@ module MLX
             
             # Compute learning rate
             if relative_step
-              min_step = 1e-6 * step if warmup_init else 1e-2
+              min_step = warmup_init ? 1e-6 * step : 1e-2
               lr_t = [min_step, 1.0 / Math.sqrt(step)].min
               lr_t = lr_t * lr
             else

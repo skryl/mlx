@@ -2,7 +2,7 @@ module MLX
   module NN
     module Layers
       # Base class for pooling layers
-      class _PoolNd < MLX::NN::Module
+      class BasePoolNd < MLX::NN::Module
         attr_reader :kernel_size, :stride, :padding, :ceil_mode
 
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false)
@@ -15,7 +15,7 @@ module MLX
       end
 
       # Max pooling operation in 1D
-      class MaxPool1d < _PoolNd
+      class MaxPool1d < BasePoolNd
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false)
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -44,7 +44,7 @@ module MLX
       end
 
       # Max pooling operation in 2D
-      class MaxPool2d < _PoolNd
+      class MaxPool2d < BasePoolNd
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false)
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -77,7 +77,7 @@ module MLX
       end
 
       # Max pooling operation in 3D
-      class MaxPool3d < _PoolNd
+      class MaxPool3d < BasePoolNd
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false)
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -129,7 +129,7 @@ module MLX
       end
 
       # Average pooling operation in 1D
-      class AvgPool1d < _PoolNd
+      class AvgPool1d < BasePoolNd
         attr_reader :count_include_pad
         
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false, count_include_pad: true)
@@ -163,7 +163,7 @@ module MLX
       end
 
       # Average pooling operation in 2D
-      class AvgPool2d < _PoolNd
+      class AvgPool2d < BasePoolNd
         attr_reader :count_include_pad
         
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false, count_include_pad: true)
@@ -201,7 +201,7 @@ module MLX
       end
 
       # Average pooling operation in 3D
-      class AvgPool3d < _PoolNd
+      class AvgPool3d < BasePoolNd
         attr_reader :count_include_pad
         
         def initialize(kernel_size, stride: nil, padding: 0, ceil_mode: false, count_include_pad: true)

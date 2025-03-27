@@ -68,18 +68,19 @@ module MLX
         private
         
         def interpolate_1d(x, size)
-          batch_size, channels, length = x.shape
+          length = x.shape[-1]
           
           if @mode == 'nearest'
-            # Use nearest neighbor interpolation
+            # Use nearest neighbor upsampling
             scale = size.to_f / length
             indices = MLX::Array.arange(size).floor_divide(scale).to_i
-            return x[:, :, indices]
+            # Fix Python-style indexing
+            return x[0...x.shape[0], 0...x.shape[1], indices]
           else
-            # Linear interpolation
+            # Use linear interpolation
             scale = size > 1 ? (length - 1) / (size - 1.0) : 0
             
-            # Compute the indices and weights for linear interpolation
+            # Get indices and weights for interpolation
             idx_f = MLX::Array.arange(size) * scale
             idx_l = idx_f.floor.to_i
             idx_r = idx_l + 1
@@ -88,78 +89,90 @@ module MLX
             weight_r = idx_f - idx_l
             weight_l = 1 - weight_r
             
-            # Interpolate
-            left = x[:, :, idx_l]
-            right = x[:, :, idx_r]
+            # Get values and apply weights
+            # Fix Python-style indexing
+            left = x[0...x.shape[0], 0...x.shape[1], idx_l]
+            right = x[0...x.shape[0], 0...x.shape[1], idx_r]
             
-            result = left * weight_l.reshape(1, 1, -1) + right * weight_r.reshape(1, 1, -1)
-            result
+            return weight_l * left + weight_r * right
           end
         end
         
         def interpolate_2d(x, height, width)
-          batch_size, channels, in_h, in_w = x.shape
+          in_h, in_w = x.shape[-2], x.shape[-1]
           
           if @mode == 'nearest'
-            # Use nearest neighbor interpolation
+            # Use nearest neighbor upsampling
             h_scale = height.to_f / in_h
             w_scale = width.to_f / in_w
             
             h_indices = MLX::Array.arange(height).floor_divide(h_scale).to_i
             w_indices = MLX::Array.arange(width).floor_divide(w_scale).to_i
             
-            return x[:, :, h_indices, :][:, :, :, w_indices]
+            # Fix Python-style indexing
+            temp = x[0...x.shape[0], 0...x.shape[1], h_indices, 0...x.shape[3]]
+            return temp[0...temp.shape[0], 0...temp.shape[1], 0...temp.shape[2], w_indices]
           elsif @mode == 'bilinear'
-            # Bilinear interpolation
-            if @align_corners && height > 1 && width > 1
+            # Use bilinear interpolation
+            if height > 1
               h_scale = (in_h - 1) / (height - 1.0)
-              w_scale = (in_w - 1) / (width - 1.0)
             else
-              h_scale = in_h / height.to_f
-              w_scale = in_w / width.to_f
+              h_scale = 0
             end
             
-            # Compute interpolation weights for height
+            if width > 1
+              w_scale = (in_w - 1) / (width - 1.0)
+            else
+              w_scale = 0
+            end
+            
+            # Get y coordinates
             y_f = MLX::Array.arange(height) * h_scale
             y_l = y_f.floor.to_i
             y_h = y_l + 1
             y_h = MLX::Core.minimum(y_h, MLX::Array.full_like(y_h, in_h - 1))
-            y_weight_h = y_f - y_l
-            y_weight_l = 1 - y_weight_h
             
-            # Compute interpolation weights for width
+            # Get x coordinates
             x_f = MLX::Array.arange(width) * w_scale
             x_l = x_f.floor.to_i
             x_h = x_l + 1
             x_h = MLX::Core.minimum(x_h, MLX::Array.full_like(x_h, in_w - 1))
-            x_weight_h = x_f - x_l
-            x_weight_l = 1 - x_weight_h
             
-            # Perform bilinear interpolation
-            # Get the four points for each output pixel
-            x_ll = x[:, :, y_l, :][:, :, :, x_l]  # lower left
-            x_lh = x[:, :, y_l, :][:, :, :, x_h]  # lower right
-            x_hl = x[:, :, y_h, :][:, :, :, x_l]  # upper left
-            x_hh = x[:, :, y_h, :][:, :, :, x_h]  # upper right
+            # Get weights
+            w_yl = (y_f - y_l).reshape(height, 1)
+            w_yh = (1 - w_yl)
+            w_xl = (x_f - x_l).reshape(1, width)
+            w_xh = (1 - w_xl)
             
-            # Compute weighted sum
-            # First along width, then along height
-            x_l_interp = x_ll * x_weight_l.reshape(1, 1, 1, -1) + x_lh * x_weight_h.reshape(1, 1, 1, -1)
-            x_h_interp = x_hl * x_weight_l.reshape(1, 1, 1, -1) + x_hh * x_weight_h.reshape(1, 1, 1, -1)
-            x_interp = x_l_interp * y_weight_l.reshape(1, 1, -1, 1) + x_h_interp * y_weight_h.reshape(1, 1, -1, 1)
+            # Get the four corners and apply weights
+            # Fix Python-style indexing
+            temp1 = x[0...x.shape[0], 0...x.shape[1], y_l, 0...x.shape[3]]
+            temp2 = x[0...x.shape[0], 0...x.shape[1], y_h, 0...x.shape[3]]
             
-            return x_interp
+            x_ll = temp1[0...temp1.shape[0], 0...temp1.shape[1], 0...temp1.shape[2], x_l]  # lower left
+            x_lh = temp1[0...temp1.shape[0], 0...temp1.shape[1], 0...temp1.shape[2], x_h]  # lower right
+            x_hl = temp2[0...temp2.shape[0], 0...temp2.shape[1], 0...temp2.shape[2], x_l]  # upper left
+            x_hh = temp2[0...temp2.shape[0], 0...temp2.shape[1], 0...temp2.shape[2], x_h]  # upper right
+            
+            # Apply bilinear interpolation formula
+            output = (
+              w_yh * w_xh * x_ll + 
+              w_yh * w_xl * x_lh + 
+              w_yl * w_xh * x_hl + 
+              w_yl * w_xl * x_hh
+            )
+            
+            return output
           else
-            raise ArgumentError, "Mode #{@mode} not implemented for 2D upsampling"
+            raise ArgumentError, "Unsupported interpolation mode: #{@mode} for 2D"
           end
         end
         
         def interpolate_3d(x, depth, height, width)
-          # Similar implementation for 3D, expanding the 2D version with an additional dimension
+          in_d, in_h, in_w = x.shape[-3], x.shape[-2], x.shape[-1]
+          
           if @mode == 'nearest'
-            # Nearest neighbor for 3D tensors
-            batch_size, channels, in_d, in_h, in_w = x.shape
-            
+            # Use nearest neighbor upsampling
             d_scale = depth.to_f / in_d
             h_scale = height.to_f / in_h
             w_scale = width.to_f / in_w
@@ -168,9 +181,13 @@ module MLX
             h_indices = MLX::Array.arange(height).floor_divide(h_scale).to_i
             w_indices = MLX::Array.arange(width).floor_divide(w_scale).to_i
             
-            return x[:, :, d_indices, :, :][:, :, :, h_indices, :][:, :, :, :, w_indices]
+            # Fix Python-style indexing
+            temp1 = x[0...x.shape[0], 0...x.shape[1], d_indices, 0...x.shape[3], 0...x.shape[4]]
+            temp2 = temp1[0...temp1.shape[0], 0...temp1.shape[1], 0...temp1.shape[2], h_indices, 0...temp1.shape[4]]
+            return temp2[0...temp2.shape[0], 0...temp2.shape[1], 0...temp2.shape[2], 0...temp2.shape[3], w_indices]
           else
-            raise ArgumentError, "Mode #{@mode} not implemented for 3D upsampling yet"
+            # Trilinear interpolation would be implemented here
+            raise ArgumentError, "Unsupported interpolation mode: #{@mode} for 3D"
           end
         end
       end

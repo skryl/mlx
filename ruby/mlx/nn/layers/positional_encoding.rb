@@ -38,7 +38,8 @@ module MLX
             raise ArgumentError, "Input sequence length #{seq_len} exceeds maximum length #{@max_len}"
           end
           
-          pos_encoding = @pe[:, :seq_len, :]
+          # Use proper Ruby indexing notation
+          pos_encoding = @pe[0...1, 0...seq_len, 0...@embedding_dim]
           result = x + pos_encoding
           
           @dropout ? @dropout.forward(result) : result

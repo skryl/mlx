@@ -2,7 +2,7 @@ module MLX
   module NN
     module Layers
       # Base class for convolution layers
-      class _ConvNd < MLX::NN::Module
+      class BaseConvNd < MLX::NN::Module
         attr_reader :in_channels, :out_channels, :kernel_size, :stride, :padding, :dilation, :groups, :bias, :padding_mode
 
         def initialize(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode)
@@ -27,7 +27,7 @@ module MLX
           end
 
           # Initialize weights
-          fan_in = in_channels // groups * kernel_size.reduce(:*)
+          fan_in = (in_channels / groups) * kernel_size.reduce(:*)
           bound = 1.0 / Math.sqrt(fan_in)
           weight_shape = weight_shape()
           weight = MLX::NN::Init.uniform(weight_shape, -bound, bound)
@@ -52,7 +52,7 @@ module MLX
 
         # Reset parameters to their initial values
         def reset_parameters
-          fan_in = @in_channels // @groups * @kernel_size.reduce(:*)
+          fan_in = (@in_channels / @groups) * @kernel_size.reduce(:*)
           bound = 1.0 / Math.sqrt(fan_in)
           
           # Reset weight
@@ -69,7 +69,7 @@ module MLX
       end
 
       # 1D Convolution layer
-      class Conv1d < _ConvNd
+      class Conv1d < BaseConvNd
         def initialize(in_channels, out_channels, kernel_size, stride: 1, padding: 0, dilation: 1, groups: 1, bias: true, padding_mode: 'zeros')
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -87,7 +87,7 @@ module MLX
         end
         
         def weight_shape
-          [@out_channels, @in_channels // @groups, @kernel_size[0]]
+          [@out_channels, (@in_channels / @groups), @kernel_size[0]]
         end
         
         def forward(x)
@@ -122,7 +122,7 @@ module MLX
       end
 
       # 2D Convolution layer
-      class Conv2d < _ConvNd
+      class Conv2d < BaseConvNd
         def initialize(in_channels, out_channels, kernel_size, stride: 1, padding: 0, dilation: 1, groups: 1, bias: true, padding_mode: 'zeros')
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -140,7 +140,7 @@ module MLX
         end
         
         def weight_shape
-          [@out_channels, @in_channels // @groups, @kernel_size[0], @kernel_size[1]]
+          [@out_channels, (@in_channels / @groups), @kernel_size[0], @kernel_size[1]]
         end
         
         def forward(x)
@@ -175,7 +175,7 @@ module MLX
       end
 
       # 3D Convolution layer
-      class Conv3d < _ConvNd
+      class Conv3d < BaseConvNd
         def initialize(in_channels, out_channels, kernel_size, stride: 1, padding: 0, dilation: 1, groups: 1, bias: true, padding_mode: 'zeros')
           # Convert scalar parameters to arrays
           kernel_size = [kernel_size].flatten
@@ -212,7 +212,7 @@ module MLX
         end
         
         def weight_shape
-          [@out_channels, @in_channels // @groups, @kernel_size[0], @kernel_size[1], @kernel_size[2]]
+          [@out_channels, (@in_channels / @groups), @kernel_size[0], @kernel_size[1], @kernel_size[2]]
         end
         
         def forward(x)

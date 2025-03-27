@@ -55,7 +55,7 @@ module MLX
     end
     
     # Base class for learning rate schedulers
-    class _LRScheduler
+    class BaseLRScheduler
       attr_reader :optimizer, :last_epoch, :base_lrs
       
       def initialize(optimizer, last_epoch: -1, verbose: false)
@@ -111,7 +111,7 @@ module MLX
     end
     
     # Step decay learning rate scheduler
-    class StepLR < _LRScheduler
+    class StepLR < BaseLRScheduler
       attr_reader :step_size, :gamma
       
       def initialize(optimizer, step_size, gamma: 0.1, last_epoch: -1, verbose: false)
@@ -132,7 +132,7 @@ module MLX
     end
     
     # Multi-step decay learning rate scheduler
-    class MultiStepLR < _LRScheduler
+    class MultiStepLR < BaseLRScheduler
       attr_reader :milestones, :gamma
       
       def initialize(optimizer, milestones, gamma: 0.1, last_epoch: -1, verbose: false)
@@ -154,7 +154,7 @@ module MLX
     end
     
     # Exponential decay learning rate scheduler
-    class ExponentialLR < _LRScheduler
+    class ExponentialLR < BaseLRScheduler
       attr_reader :gamma
       
       def initialize(optimizer, gamma, last_epoch: -1, verbose: false)
@@ -174,7 +174,7 @@ module MLX
     end
     
     # Cosine annealing learning rate scheduler
-    class CosineAnnealingLR < _LRScheduler
+    class CosineAnnealingLR < BaseLRScheduler
       attr_reader :t_max, :eta_min
       
       def initialize(optimizer, t_max, eta_min: 0, last_epoch: -1, verbose: false)
@@ -317,7 +317,7 @@ module MLX
     end
     
     # Cyclic learning rate scheduler
-    class CyclicLR < _LRScheduler
+    class CyclicLR < BaseLRScheduler
       attr_reader :base_lr, :max_lr, :step_size_up, :step_size_down,
                   :mode, :gamma, :scale_fn, :scale_mode, :cycle_momentum,
                   :base_momentum, :max_momentum, :last_epoch
@@ -327,7 +327,7 @@ module MLX
                      cycle_momentum: true, base_momentum: 0.8, max_momentum: 0.9, 
                      last_epoch: -1, verbose: false)
         # Validate inputs
-        if mode not in ['triangular', 'triangular2', 'exp_range'] && scale_fn.nil?
+        if !['triangular', 'triangular2', 'exp_range'].include?(mode) && scale_fn.nil?
           raise ArgumentError, "Mode #{mode} not recognized. Must be one of 'triangular', 'triangular2', 'exp_range', or a custom scale_fn must be specified"
         end
         
@@ -439,7 +439,7 @@ module MLX
     end
     
     # One cycle learning rate scheduler
-    class OneCycleLR < _LRScheduler
+    class OneCycleLR < BaseLRScheduler
       attr_reader :max_lr, :total_steps, :div_factor, :pct_start, :anneal_strategy, 
                   :cycle_momentum, :base_momentum, :max_momentum, :three_phase
       

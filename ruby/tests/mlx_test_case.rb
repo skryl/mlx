@@ -1,5 +1,19 @@
 require 'minitest/autorun'
-require_relative '../mlx/mlx'  # Main MLX library
+
+# Set up the load paths for the MLX gem
+ruby_dir = File.expand_path('..', __dir__)
+lib_dir = File.join(ruby_dir, 'lib')
+$LOAD_PATH.unshift(lib_dir) unless $LOAD_PATH.include?(lib_dir)
+$LOAD_PATH.unshift(ruby_dir) unless $LOAD_PATH.include?(ruby_dir)
+
+# Point to the build directory for the MLX library
+build_dir = File.expand_path('../../build', __dir__)
+ENV['DYLD_LIBRARY_PATH'] = "#{build_dir}:#{ENV['DYLD_LIBRARY_PATH']}"
+
+# Load the MLX library
+require 'mlx/version'
+require 'mlx/core'
+require 'mlx'
 
 # Base test case for MLX tests
 class MLXTestCase < Minitest::Test
@@ -10,17 +24,22 @@ class MLXTestCase < Minitest::Test
   
   # Setup method called before each test
   def setup
-    @default_device = MLX.default_device
+    # Store the default device at the beginning of the test
+    @default_device = MLX::Core::Device.default_device
+    
+    # Set device based on environment if specified
     device_env = ENV['DEVICE']
-    if device_env
-      device = MLX.const_get(device_env.upcase)
-      MLX.set_default_device(device)
+    if device_env && device_env.downcase == 'gpu' && MLX::Core::Metal.metal_is_available
+      MLX::Core::Device.set_default_device(MLX::Core::Device::GPU)
+    elsif device_env && device_env.downcase == 'cpu'
+      MLX::Core::Device.set_default_device(MLX::Core::Device::CPU)
     end
   end
   
   # Teardown method called after each test
   def teardown
-    MLX.set_default_device(@default_device)
+    # Reset to the original device if we stored one
+    MLX::Core::Device.set_default_device(@default_device) if @default_device
   end
   
   # Assert that a MLX array is close to another array or value
@@ -31,7 +50,7 @@ class MLXTestCase < Minitest::Test
   # @param rtol [Float] Relative tolerance
   def assert_array_equal(mx_res, expected, atol: 1e-2, rtol: 1e-2)
     # Convert expected to MLX array if needed
-    expected = MLX.array(expected) unless expected.is_a?(MLX::Array)
+    expected = MLX.array(expected) unless expected.is_a?(MLX::Core::Array)
     
     # Check shape
     assert_equal expected.shape, mx_res.shape, "Shape mismatch"
@@ -39,9 +58,8 @@ class MLXTestCase < Minitest::Test
     # Check dtype
     assert_equal expected.dtype, mx_res.dtype, "Dtype mismatch"
     
-    # Check values are close
-    assert MLX.allclose(mx_res, expected, atol: atol, rtol: rtol), 
-           "Arrays are not close enough"
+    # Check values are close using our assert_allclose method
+    assert_allclose(mx_res, expected, atol: atol, rtol: rtol)
   end
   
   # Compare MLX function against NumPy equivalent
@@ -60,10 +78,21 @@ class MLXTestCase < Minitest::Test
   
   # Compare array values for closeness
   def assert_allclose(a, b, atol: 1e-2, rtol: 1e-2)
-    a = MLX.array(a) unless a.is_a?(MLX::Array)
-    b = MLX.array(b) unless b.is_a?(MLX::Array)
+    a = MLX.array(a) unless a.is_a?(MLX::Core::Array)
+    b = MLX.array(b) unless b.is_a?(MLX::Core::Array)
     
-    assert MLX.allclose(a, b, atol: atol, rtol: rtol),
-           "Arrays not close: #{a.to_s} vs #{b.to_s}"
+    # Directly check values rather than using allclose as it might not exist yet
+    a_values = MLX.to_ruby(a)
+    b_values = MLX.to_ruby(b)
+    
+    assert_equal a.shape, b.shape, "Shapes don't match: #{a.shape.inspect} vs #{b.shape.inspect}"
+    
+    a_flat = Array(a_values).flatten
+    b_flat = Array(b_values).flatten
+    
+    a_flat.zip(b_flat).each_with_index do |(a_val, b_val), i|
+      assert (a_val - b_val).abs <= (atol + rtol * b_val.abs), 
+             "Values at index #{i} not close: #{a_val} vs #{b_val}"
+    end
   end
 end 

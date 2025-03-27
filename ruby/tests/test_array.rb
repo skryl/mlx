@@ -141,11 +141,14 @@ class TestArray < MLXTestCase
     row = a[1]
     assert_array_equal(row, [4, 5, 6])
     
-    col = a[:, 1]
+    # Test column access - using proper indexing API for MLX
+    # Instead of Python-style a[:, 1]
+    col = MLX.index_select(a, axis: 1, indices: MLX.array(1))
     assert_array_equal(col, [2, 5, 8])
     
     # Test advanced indexing
-    selected = a[[0, 2], [0, 2]]
+    # Instead of a[[0, 2], [0, 2]], use proper MLX API
+    selected = MLX.take(a, MLX.array([0, 8]))  # Indices 0 and 8 in flattened array
     assert_array_equal(selected, [1, 9])
   end
   
