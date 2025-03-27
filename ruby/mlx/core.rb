@@ -1,6 +1,6 @@
 # This file contains core functionality for the MLX Ruby bindings
 # It provides direct access to the low-level C++ MLX API
-require 'mlx/ext/core'
+require_relative '../lib/mlx/core'
 
 # Require the distributed_run module
 require_relative 'distributed_run'

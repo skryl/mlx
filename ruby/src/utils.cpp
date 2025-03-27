@@ -14,53 +14,6 @@ namespace mx = mlx::core;
 // Forward declaration of internal Ruby class
 VALUE rb_cMLXArray = Qnil;
 
-// Helper to extract mx::array from Ruby VALUE
-mx::array& get_array(VALUE obj) {
-  if (rb_obj_is_kind_of(obj, rb_cMLXArray)) {
-    VALUE iv_array = rb_ivar_get(obj, rb_intern("@array"));
-    mx::array* arr_ptr = static_cast<mx::array*>(DATA_PTR(iv_array));
-    return *arr_ptr;
-  } else {
-    mx::array* arr_ptr;
-    Data_Get_Struct(obj, mx::array, arr_ptr);
-    return *arr_ptr;
-  }
-}
-
-// Check if object responds to to_mlx_array
-bool responds_to_to_mlx_array(VALUE obj) {
-  return rb_respond_to(obj, rb_intern("to_mlx_array"));
-}
-
-// Convert using to_mlx_array
-mx::array convert_using_to_mlx_array(VALUE obj) {
-  VALUE result = rb_funcall(obj, rb_intern("to_mlx_array"), 0);
-  if (!rb_obj_is_kind_of(result, rb_cMLXArray)) {
-    rb_raise(rb_eTypeError, "to_mlx_array did not return an MLX::Array");
-    return mx::array(0.0f); // Default placeholder value
-  }
-  return get_array(result);
-}
-
-// Helper function to wrap mx::array into Ruby VALUE
-VALUE wrap_array(const mx::array& arr) {
-  // Create a new MLX::Array Ruby object
-  VALUE mlx_array = rb_class_new_instance(0, nullptr, rb_cMLXArray);
-  
-  // Create a new mlx::core::array and copy the data
-  mx::array* arr_copy = new mx::array(arr);
-  
-  // Wrap the array in a Ruby DATA object
-  VALUE data = Data_Wrap_Struct(rb_cObject, nullptr, 
-      [](void* p) { delete static_cast<mx::array*>(p); }, 
-      arr_copy);
-  
-  // Set the @array instance variable
-  rb_ivar_set(mlx_array, rb_intern("@array"), data);
-  
-  return mlx_array;
-}
-
 // Helper to extract Ruby array into C++ vector
 static std::vector<int> ruby_array_to_vector(VALUE arr) {
   Check_Type(arr, T_ARRAY);

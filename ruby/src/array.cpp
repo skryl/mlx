@@ -429,13 +429,6 @@ VALUE rb_alloc_array(VALUE klass) {
   return Data_Wrap_Struct(klass, NULL, rb_free_array, ptr);
 }
 
-// Helper to extract mx::array from Ruby VALUE
-mx::array& get_array(VALUE self) {
-  mx::array* ptr;
-  Data_Get_Struct(self, mx::array, ptr);
-  return *ptr;
-}
-
 // Array methods for Ruby
 VALUE rb_array_initialize(int argc, VALUE* argv, VALUE self) {
   // Enhanced initialization with shape and dtype
@@ -1426,23 +1419,6 @@ VALUE rb_array_each(VALUE self) {
   }
   
   return self;
-}
-
-// Helper function to check if an object responds to to_mlx_array
-bool responds_to_to_mlx_array(VALUE obj) {
-  return rb_respond_to(obj, rb_intern("to_mlx_array"));
-}
-
-// Convert object using to_mlx_array if available
-mx::array convert_using_to_mlx_array(VALUE obj) {
-  VALUE mlx_array = rb_funcall(obj, rb_intern("to_mlx_array"), 0);
-  
-  if (!rb_obj_is_kind_of(mlx_array, rb_path2class("MLX::Array"))) {
-    rb_raise(rb_eTypeError, "to_mlx_array must return an MLX::Array");
-  }
-  
-  mx::array& arr = get_array(mlx_array);
-  return arr;
 }
 
 // Bitwise operations
