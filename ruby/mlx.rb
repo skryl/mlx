@@ -73,10 +73,6 @@ module MLX
         Core::Random
     end
 
-    def self.constants
-        Core::Constants
-    end
-
     def self.device
         Core::Device
     end

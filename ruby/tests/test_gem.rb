@@ -34,6 +34,9 @@ class TestGem < MLXTestCase
     # Test module functions
     test_module_functions
     
+    # Test class methods
+    test_class_methods
+    
     puts "\nTest completed!"
   end
 
@@ -78,7 +81,13 @@ class TestGem < MLXTestCase
       ['MLX::Core::Constants', :inf],
       ['MLX::Core::Constants', :nan],
       ['MLX::Core::Constants', :newaxis],
-      ['MLX::Core::Distributed', :is_initialized],
+      ['MLX::Core::Group', :is_available],
+      ['MLX::Core::Group', :init],
+      ['MLX::Core::Group', :all_sum],
+      ['MLX::Core::Group', :all_gather],
+      ['MLX::Core::Group', :send],
+      ['MLX::Core::Group', :recv],
+      ['MLX::Core::Group', :recv_like],
       ['MLX::Core::Fast', :gemm],
       ['MLX::Core::Fast', :scaled_dot_product_attention],
       ['MLX::Core::Fast', :multi_head_attention],
@@ -306,7 +315,10 @@ class TestGem < MLXTestCase
       # Arithmetic operators
       :+, :-, :*, :/, :-@, :matmul, :floor_div, :%,
       # Comparison operators
-      :==, :!=, :<, :<=, :>, :>=
+      :==, :!=, :<, :<=, :>, :>=,
+      # Array static methods for newly delegated ops methods
+      :zeros_like, :ones_like, :full_like, :logical_not, :logical_and, :logical_or, :logical_xor,
+      :softmax, :softplus, :dropout, :one_hot
     ]
     
     begin
@@ -409,6 +421,28 @@ class TestGem < MLXTestCase
     test_linalg_module
   end
   
+  def test_class_methods
+    puts "\nTesting Device Class Methods"
+    puts "-------------------------"
+    device_methods = %w[default_device set_default_device sync_device devices]
+    test_methods_in_class("MLX::Core::Device", device_methods)
+    
+    puts "\nTesting Stream Class Methods"
+    puts "-------------------------"
+    stream_methods = %w[default_stream set_default_stream new_stream synchronize stream]
+    test_methods_in_class("MLX::Core::Stream", stream_methods)
+    
+    puts "\nTesting Group Class Methods"
+    puts "------------------------"
+    group_methods = %w[is_available init all_sum all_gather send recv recv_like]
+    test_methods_in_class("MLX::Core::Group", group_methods)
+    
+    puts "\nTesting StreamContext Class Methods"
+    puts "---------------------------------"
+    streamcontext_methods = %w[create_stream_context]
+    test_methods_in_class("MLX::Core::StreamContext", streamcontext_methods)
+  end
+  
   # Helper method to test methods in a module
   def test_methods_in_module(module_name, methods)
     methods.each do |method_name|
@@ -424,6 +458,25 @@ class TestGem < MLXTestCase
         end
       rescue => e
         puts "#{module_name}.#{method_name}: Error - #{e.message}"
+      end
+    end
+  end
+
+  # Helper method to test methods in a class
+  def test_methods_in_class(class_name, methods)
+    methods.each do |method_name|
+      begin
+        class_parts = class_name.split('::')
+        cls = Object
+        class_parts.each { |part| cls = cls.const_get(part) }
+        
+        if cls.respond_to?(method_name.to_sym)
+          puts "#{class_name}.#{method_name}: Available"
+        else
+          puts "#{class_name}.#{method_name}: MISSING"
+        end
+      rescue => e
+        puts "#{class_name}.#{method_name}: Error - #{e.message}"
       end
     end
   end
