@@ -3230,6 +3230,124 @@ static VALUE ops_contiguous(int argc, VALUE* argv, VALUE self) {
   return wrap_array(result);
 }
 
+// Add missing convolution function implementations
+static VALUE ops_conv1d(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 7) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..7)", argc);
+  }
+
+  VALUE input_val = argv[0];
+  VALUE weight_val = argv[1];
+  int stride = 1;
+  int padding = 0;
+  int dilation = 1;
+  int groups = 1;
+  VALUE stream_val = Qnil;
+
+  if (argc >= 3) stride = FIX2INT(argv[2]);
+  if (argc >= 4) padding = FIX2INT(argv[3]);
+  if (argc >= 5) dilation = FIX2INT(argv[4]);
+  if (argc >= 6) groups = FIX2INT(argv[5]);
+  if (argc >= 7) stream_val = argv[6];
+
+  mx::array& input = get_array(input_val);
+  mx::array& weight = get_array(weight_val);
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+
+  mx::array result = mx::conv1d(input, weight, stride, padding, dilation, groups, stream);
+  return wrap_array(result);
+}
+
+static VALUE ops_conv2d(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 7) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..7)", argc);
+  }
+
+  VALUE input_val = argv[0];
+  VALUE weight_val = argv[1];
+  std::pair<int, int> stride = {1, 1};
+  std::pair<int, int> padding = {0, 0};
+  std::pair<int, int> dilation = {1, 1};
+  int groups = 1;
+  VALUE stream_val = Qnil;
+
+  if (argc >= 3) {
+    if (TYPE(argv[2]) == T_FIXNUM) {
+      int s = FIX2INT(argv[2]);
+      stride = {s, s};
+    } else {
+      Check_Type(argv[2], T_ARRAY);
+      if (RARRAY_LEN(argv[2]) != 2) {
+        rb_raise(rb_eArgError, "stride must be an integer or a 2-element array");
+      }
+      stride = {
+        FIX2INT(rb_ary_entry(argv[2], 0)),
+        FIX2INT(rb_ary_entry(argv[2], 1))
+      };
+    }
+  }
+
+  if (argc >= 4) {
+    if (TYPE(argv[3]) == T_FIXNUM) {
+      int p = FIX2INT(argv[3]);
+      padding = {p, p};
+    } else {
+      Check_Type(argv[3], T_ARRAY);
+      if (RARRAY_LEN(argv[3]) != 2) {
+        rb_raise(rb_eArgError, "padding must be an integer or a 2-element array");
+      }
+      padding = {
+        FIX2INT(rb_ary_entry(argv[3], 0)),
+        FIX2INT(rb_ary_entry(argv[3], 1))
+      };
+    }
+  }
+
+  if (argc >= 5) {
+    if (TYPE(argv[4]) == T_FIXNUM) {
+      int d = FIX2INT(argv[4]);
+      dilation = {d, d};
+    } else {
+      Check_Type(argv[4], T_ARRAY);
+      if (RARRAY_LEN(argv[4]) != 2) {
+        rb_raise(rb_eArgError, "dilation must be an integer or a 2-element array");
+      }
+      dilation = {
+        FIX2INT(rb_ary_entry(argv[4], 0)),
+        FIX2INT(rb_ary_entry(argv[4], 1))
+      };
+    }
+  }
+
+  if (argc >= 6) groups = FIX2INT(argv[5]);
+  if (argc >= 7) stream_val = argv[6];
+
+  mx::array& input = get_array(input_val);
+  mx::array& weight = get_array(weight_val);
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+
+  mx::array result = mx::conv2d(input, weight, stride, padding, dilation, groups, stream);
+  return wrap_array(result);
+}
+
+static VALUE ops_save(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2)", argc);
+  }
+
+  VALUE file_val = argv[0];
+  VALUE arr_val = argv[1];
+
+  Check_Type(file_val, T_STRING);
+  char* filename = StringValueCStr(file_val);
+  mx::array& arr = get_array(arr_val);
+
+  // Use the MLX save function
+  mx::save(filename, arr);
+
+  return Qnil;
+}
+
 // Initialize ops module
 void init_ops(VALUE module) {
   // Array creation
@@ -3435,4 +3553,7 @@ void init_ops(VALUE module) {
   rb_define_module_function(module, "slice", RUBY_METHOD_FUNC(ops_slice), -1);
   rb_define_module_function(module, "slice_update", RUBY_METHOD_FUNC(ops_slice_update), -1);
   rb_define_module_function(module, "contiguous", RUBY_METHOD_FUNC(ops_contiguous), -1);
+  rb_define_module_function(module, "conv1d", RUBY_METHOD_FUNC(ops_conv1d), -1);
+  rb_define_module_function(module, "conv2d", RUBY_METHOD_FUNC(ops_conv2d), -1);
+  rb_define_module_function(module, "save", RUBY_METHOD_FUNC(ops_save), -1);
 } 
