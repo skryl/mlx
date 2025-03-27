@@ -162,14 +162,14 @@ static VALUE fft_fft2(int argc, VALUE* argv, VALUE self) {
   // Default axes for fft2 is [-2, -1]
   std::vector<int> default_axes = {-2, -1};
   
-  if (NIL_P(s) && NIL_P(axes)) {
+  if (!NIL_P(s) && NIL_P(axes)) {
+    // Match Python: raise error if s is given but axes is None
+    rb_raise(rb_eArgError, "[fft2] `axes` should not be nil if `s` is not nil.");
+  } else if (NIL_P(s) && NIL_P(axes)) {
     // Use default axes
     return wrap_array(mx::fft::fftn(a, default_axes, stream));
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    // Shape provided but no axes - use default axes
-    std::vector<int> shape = ruby_array_to_vector(s);
-    return wrap_array(mx::fft::fftn(a, shape, default_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     // Axes provided but no shape
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::fftn(a, ax, stream));
@@ -199,15 +199,13 @@ static VALUE fft_ifft2(int argc, VALUE* argv, VALUE self) {
   // Default axes for ifft2 is [-2, -1]
   std::vector<int> default_axes = {-2, -1};
   
-  if (NIL_P(s) && NIL_P(axes)) {
+  if (!NIL_P(s) && NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[ifft2] `axes` should not be nil if `s` is not nil.");
+  } else if (NIL_P(s) && NIL_P(axes)) {
     // Use default axes
     return wrap_array(mx::fft::ifftn(a, default_axes, stream));
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    // Shape provided but no axes - use default axes
-    std::vector<int> shape = ruby_array_to_vector(s);
-    return wrap_array(mx::fft::ifftn(a, shape, default_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    // Axes provided but no shape
+  } 
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::ifftn(a, ax, stream));
   } else {
@@ -236,19 +234,15 @@ static VALUE fft_rfft2(int argc, VALUE* argv, VALUE self) {
   // Default axes for rfft2 is [-2, -1]
   std::vector<int> default_axes = {-2, -1};
   
-  if (NIL_P(s) && NIL_P(axes)) {
-    // Use default axes
+  if (!NIL_P(s) && NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[rfft2] `axes` should not be nil if `s` is not nil.");
+  } else if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::rfftn(a, default_axes, stream));
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    // Shape provided but no axes - use default axes
-    std::vector<int> shape = ruby_array_to_vector(s);
-    return wrap_array(mx::fft::rfftn(a, shape, default_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    // Axes provided but no shape
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::rfftn(a, ax, stream));
   } else {
-    // Both shape and axes provided
     std::vector<int> shape = ruby_array_to_vector(s);
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::rfftn(a, shape, ax, stream));
@@ -273,19 +267,15 @@ static VALUE fft_irfft2(int argc, VALUE* argv, VALUE self) {
   // Default axes for irfft2 is [-2, -1]
   std::vector<int> default_axes = {-2, -1};
   
-  if (NIL_P(s) && NIL_P(axes)) {
-    // Use default axes
+  if (!NIL_P(s) && NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[irfft2] `axes` should not be nil if `s` is not nil.");
+  } else if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::irfftn(a, default_axes, stream));
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    // Shape provided but no axes - use default axes
-    std::vector<int> shape = ruby_array_to_vector(s);
-    return wrap_array(mx::fft::irfftn(a, shape, default_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    // Axes provided but no shape
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::irfftn(a, ax, stream));
   } else {
-    // Both shape and axes provided
     std::vector<int> shape = ruby_array_to_vector(s);
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::irfftn(a, shape, ax, stream));
@@ -310,17 +300,9 @@ static VALUE fft_fftn(int argc, VALUE* argv, VALUE self) {
   if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::fftn(a, stream));
   } else if (!NIL_P(s) && NIL_P(axes)) {
-    if (!RB_TYPE_P(s, T_ARRAY)) {
-      rb_raise(rb_eTypeError, "s must be an array");
-    }
-    std::vector<int> shape = ruby_array_to_vector(s);
-    
-    // For fftn with only shape, we need axes to be supplied
-    // Assume it's all axes
-    std::vector<int> all_axes(shape.size());
-    std::iota(all_axes.begin(), all_axes.end(), 0);
-    return wrap_array(mx::fft::fftn(a, shape, all_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[fftn] `axes` should not be nil if `s` is not nil.");
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::fftn(a, ax, stream));
   } else {
@@ -348,17 +330,9 @@ static VALUE fft_ifftn(int argc, VALUE* argv, VALUE self) {
   if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::ifftn(a, stream));
   } else if (!NIL_P(s) && NIL_P(axes)) {
-    if (!RB_TYPE_P(s, T_ARRAY)) {
-      rb_raise(rb_eTypeError, "s must be an array");
-    }
-    std::vector<int> shape = ruby_array_to_vector(s);
-    
-    // For ifftn with only shape, we need axes to be supplied
-    // Assume it's all axes
-    std::vector<int> all_axes(shape.size());
-    std::iota(all_axes.begin(), all_axes.end(), 0);
-    return wrap_array(mx::fft::ifftn(a, shape, all_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[ifftn] `axes` should not be nil if `s` is not nil.");
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::ifftn(a, ax, stream));
   } else {
@@ -386,17 +360,9 @@ static VALUE fft_rfftn(int argc, VALUE* argv, VALUE self) {
   if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::rfftn(a, stream));
   } else if (!NIL_P(s) && NIL_P(axes)) {
-    if (!RB_TYPE_P(s, T_ARRAY)) {
-      rb_raise(rb_eTypeError, "s must be an array");
-    }
-    std::vector<int> shape = ruby_array_to_vector(s);
-    
-    // For rfftn with only shape, we need axes to be supplied
-    // Assume it's all axes
-    std::vector<int> all_axes(shape.size());
-    std::iota(all_axes.begin(), all_axes.end(), 0);
-    return wrap_array(mx::fft::rfftn(a, shape, all_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[rfftn] `axes` should not be nil if `s` is not nil.");
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::rfftn(a, ax, stream));
   } else {
@@ -424,17 +390,9 @@ static VALUE fft_irfftn(int argc, VALUE* argv, VALUE self) {
   if (NIL_P(s) && NIL_P(axes)) {
     return wrap_array(mx::fft::irfftn(a, stream));
   } else if (!NIL_P(s) && NIL_P(axes)) {
-    if (!RB_TYPE_P(s, T_ARRAY)) {
-      rb_raise(rb_eTypeError, "s must be an array");
-    }
-    std::vector<int> shape = ruby_array_to_vector(s);
-    
-    // For irfftn with only shape, we need axes to be supplied
-    // Assume it's all axes
-    std::vector<int> all_axes(shape.size());
-    std::iota(all_axes.begin(), all_axes.end(), 0);
-    return wrap_array(mx::fft::irfftn(a, shape, all_axes, stream));
-  } else if (NIL_P(s) && !NIL_P(axes)) {
+    rb_raise(rb_eArgError, "[irfftn] `axes` should not be nil if `s` is not nil.");
+  }
+  else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
     return wrap_array(mx::fft::irfftn(a, ax, stream));
   } else {

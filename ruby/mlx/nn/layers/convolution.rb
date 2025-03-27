@@ -28,7 +28,7 @@ module MLX
 
           # Initialize weights
           fan_in = (in_channels / groups) * kernel_size.reduce(:*)
-          bound = 1.0 / Math.sqrt(fan_in)
+          bound = 1.0 / Ops.sqrt(fan_in)
           weight_shape = weight_shape()
           weight = MLX::NN::Init.uniform(weight_shape, -bound, bound)
           register_parameter('weight', weight)
@@ -53,7 +53,7 @@ module MLX
         # Reset parameters to their initial values
         def reset_parameters
           fan_in = (@in_channels / @groups) * @kernel_size.reduce(:*)
-          bound = 1.0 / Math.sqrt(fan_in)
+          bound = 1.0 / Ops.sqrt(fan_in)
           
           # Reset weight
           weight_shape = weight_shape()
@@ -276,7 +276,7 @@ module MLX
 
           # Weight shape: (in_channels, out_channels, kernel_size)
           # Note: in_channels and out_channels are swapped compared to Conv1d
-          scale = 1.0 / Math.sqrt(in_channels * kernel_size)
+          scale = 1.0 / Ops.sqrt(in_channels * kernel_size)
           weight = MLX::Random.uniform(-scale, scale, [in_channels, out_channels, kernel_size])
           register_parameter("weight", weight)
 
@@ -321,7 +321,7 @@ module MLX
           # Weight shape: (in_channels, out_channels, kernel_h, kernel_w)
           # Note: in_channels and out_channels are swapped compared to Conv2d
           kernel_h, kernel_w = @kernel_size
-          scale = 1.0 / Math.sqrt(in_channels * kernel_h * kernel_w)
+          scale = 1.0 / Ops.sqrt(in_channels * kernel_h * kernel_w)
           weight = MLX::Random.uniform(-scale, scale, [in_channels, out_channels, kernel_h, kernel_w])
           register_parameter("weight", weight)
 
@@ -366,7 +366,7 @@ module MLX
           # Weight shape: (in_channels, out_channels, kernel_d, kernel_h, kernel_w)
           # Note: in_channels and out_channels are swapped compared to Conv3d
           kernel_d, kernel_h, kernel_w = @kernel_size
-          scale = 1.0 / Math.sqrt(in_channels * kernel_d * kernel_h * kernel_w)
+          scale = 1.0 / Ops.sqrt(in_channels * kernel_d * kernel_h * kernel_w)
           weight = MLX::Random.uniform(-scale, scale, [in_channels, out_channels, kernel_d, kernel_h, kernel_w])
           register_parameter("weight", weight)
 

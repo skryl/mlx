@@ -43,7 +43,7 @@ module MLX
         # GELU activation: x * Φ(x) where Φ is the CDF of the standard normal distribution
         def self.gelu(x)
           # Approximation using tanh
-          sqrt_2_over_pi = Math.sqrt(2.0 / Math::PI)
+          sqrt_2_over_pi = Ops.sqrt(2.0 / MLX.pi)
           inner = sqrt_2_over_pi * (x + 0.044715 * MLX.power(x, 3))
           x * 0.5 * (1 + MLX.tanh(inner))
         end

@@ -40,7 +40,7 @@ class SimpleTransformer < MLX::NN::Module
   def forward(x, mask = nil)
     # Embedding
     x = @embedding.call(x)
-    x = x * Math.sqrt(@d_model)
+    x = x * Ops.sqrt(@d_model)
     
     # Self-attention
     attn_output = @attention.call(x, x, x, mask: mask)

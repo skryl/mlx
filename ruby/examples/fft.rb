@@ -5,7 +5,7 @@ puts "------------------------------"
 
 # Create a simple signal
 puts "\nCreating a simple cosine signal:"
-x = (0...64).to_a.map { |i| Math.cos(2 * Math::PI * i / 32.0) }
+x = (0...64).to_a.map { |i| Ops.cos(2 * MLX.pi * i / 32.0) }
 signal = MLX.array(x)
 puts "Signal shape: #{signal.shape.inspect}"
 

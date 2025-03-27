@@ -1,0 +1,259 @@
+--- a/fast.cpp
++++ b/fast.cpp
+@@ -15,6 +15,37 @@
+ #include "mlx/ops.h"
+ 
+ namespace mx = mlx::core;
++
++// Minimal helper to parse an optional 'stream' or device argument from Ruby.
++// You will likely want to expand this logic to handle objects that wrap streams/devices.
++static mx::StreamOrDevice parse_stream_or_device(VALUE v) {
++  if (NIL_P(v)) {
++    // No stream
++    return mx::StreamOrDevice{};
++  }
++  else if (RB_TYPE_P(v, T_FIXNUM)) {
++    // Interpret a fixnum as a device index
++    int device_id = NUM2INT(v);
++    // e.g. create a device from the ID
++    return mx::StreamOrDevice(device_id);
++  }
++  else if (RB_TYPE_P(v, T_FLOAT)) {
++    // Arbitrary example: raise an error if it's a float
++    rb_raise(rb_eArgError, "Cannot interpret float as a stream/device");
++  }
++  else {
++    // If you have a real 'MLX::Core::Stream' or 'MLX::Core::Device' class, you'd check for it here.
++    // e.g. if (rb_obj_is_kind_of(v, rb_path2class("MLX::Core::Stream"))) { ... }
++    // else if (rb_obj_is_kind_of(v, rb_path2class("MLX::Core::Device"))) { ... }
++    // For now, error out.
++    rb_raise(rb_eArgError, "Unsupported stream/device argument");
++  }
++  // Fallback
++  return mx::StreamOrDevice{};
++}
+ 
+ // Helper to extract mx::array from Ruby VALUE
+ static mx::array& get_array(VALUE obj) {
+@@ -275,7 +306,16 @@ static VALUE fast_rms_norm(int argc, VALUE* argv, VALUE self) {
+ }
+ 
+ static VALUE fast_rms_norm(int argc, VALUE* argv, VALUE self) {
+-  if (argc < 2 || argc > 3) {
++  // Python: rms_norm(x, weight=None, eps, *, stream=None)
++  // -> We need at least (x, weight, eps), optional stream.
++  // So total 3..4 arguments in Ruby.
++  if (argc < 3 || argc > 4) {
++    rb_raise(rb_eArgError,
++             "wrong number of arguments (given %d, expected 3..4). "
++             "Signature: rms_norm(x, weight=nil, eps, stream=nil)",
++             argc);
++  }
++
+   mx::array& arr_x = get_array(argv[0]);
+   VALUE weight_val = argv[1];
+   double eps_val = NUM2DBL(argv[2]);
+@@ -283,12 +323,17 @@ static VALUE fast_rms_norm(int argc, VALUE* argv, VALUE self) {
+   if (NIL_P(weight_val)) {
+     weight_opt = std::nullopt;
+   } else {
+-    weight_opt = get_array(weight_val);
++    weight_opt = get_array(weight_val);  
+   }
+ 
+-  mx::array result = mx::fast::rms_norm(arr_x, weight_opt, eps_val);
++  // Optional 4th param: stream
++  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
++  mx::StreamOrDevice s = parse_stream_or_device(stream_val);
++
++  mx::array result = mx::fast::rms_norm(arr_x, weight_opt, eps_val, s);
+   return wrap_array(result);
+ }
+ 
+@@ -311,7 +356,16 @@ static VALUE fast_layer_norm(int argc, VALUE* argv, VALUE self) {
+ 
+ static VALUE fast_layer_norm(int argc, VALUE* argv, VALUE self) {
+   // Python: layer_norm(x, weight=None, bias=None, eps, *, stream=None)
+-  if (argc < 2 || argc > 4) {
++  // That means we need x, weight, bias, eps mandatory, plus stream optional -> 4..5 in Ruby.
++  if (argc < 4 || argc > 5) {
++    rb_raise(rb_eArgError,
++             "wrong number of arguments (given %d, expected 4..5). "
++             "Signature: layer_norm(x, weight=nil, bias=nil, eps, stream=nil)",
++             argc);
++  }
++
++  // Required arguments: x, weight, bias, eps
++  // Optional argument: stream
+   mx::array& arr_x = get_array(argv[0]);
+   VALUE weight_val = argv[1];
+   VALUE bias_val   = argv[2];
+@@ -324,10 +378,17 @@ static VALUE fast_layer_norm(int argc, VALUE* argv, VALUE self) {
+     weight_opt = get_array(weight_val);
+   }
+   if (!NIL_P(bias_val)) {
+-    bias_opt = get_array(bias_val);
++    bias_opt   = get_array(bias_val);
+   }
+ 
+-  mx::array result = mx::fast::layer_norm(arr_x, weight_opt, bias_opt, eps_val);
++  // Optional 5th param: stream
++  VALUE stream_val = (argc > 4) ? argv[4] : Qnil;
++  mx::StreamOrDevice s = parse_stream_or_device(stream_val);
++
++  mx::array result = mx::fast::layer_norm(arr_x, weight_opt, bias_opt, eps_val, s);
+   return wrap_array(result);
+ }
+ 
+@@ -337,7 +398,9 @@ static VALUE fast_rope_inplace(int argc, VALUE* argv, VALUE self) {
+ }
+ 
+ static VALUE fast_rope(int argc, VALUE* argv, VALUE self) {
+-  if (argc < 2 || argc > 7) {
++  // Python: rope(a, dims, *, traditional, base, scale, offset, freqs=None, stream=None)
++  // That is 6 required plus up to 2 optional => total 6..8 arguments in Ruby.
++  if (argc < 6 || argc > 8) {
+     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 6..8)", argc);
+   }
+ 
+@@ -350,22 +413,30 @@ static VALUE fast_rope(int argc, VALUE* argv, VALUE self) {
+ 
+   bool traditional_val = RTEST(argv[2]);
+ 
+-  std::optional<float> base_val;
+-  if (!NIL_P(argv[3])) {
+-    base_val = (float)NUM2DBL(argv[3]);
++  std::optional<float> base_opt;
++  if (!NIL_P(argv[3])) {
++    base_opt = (float)NUM2DBL(argv[3]);
+   }
+   float scale_val = (float)NUM2DBL(argv[4]);
+ 
+   mx::array offset_arr = mx::array(0);
+   if (!NIL_P(argv[5])) {
+     if (RB_TYPE_P(argv[5], T_FIXNUM)) {
+       offset_arr = mx::array(NUM2INT(argv[5]));
+     } else {
+       offset_arr = get_array(argv[5]);
+     }
+   }
+ 
+-  std::optional<mx::array> freqs_opt;
+-  if (argc > 6 && !NIL_P(argv[6])) {
++  // 7th argument is freqs
++  std::optional<mx::array> freqs_opt;
++  if (argc >= 7 && !NIL_P(argv[6])) {
+     freqs_opt = get_array(argv[6]);
+   }
++
++  // 8th argument is stream
++  VALUE stream_val = (argc > 7) ? argv[7] : Qnil;
++  mx::StreamOrDevice s = parse_stream_or_device(stream_val);
++
+   mx::array result = mx::fast::rope(
+       arr_x, dims_val, traditional_val, base_opt, scale_val, offset_arr, freqs_opt, s);
+   return wrap_array(result);
+@@ -385,8 +456,9 @@ static VALUE fast_scaled_dot_product_attention(int argc, VALUE* argv, VALUE self)
+   // Python signature: scaled_dot_product_attention(q, k, v, *, scale, mask=None, memory_efficient_threshold=None, stream=None)
+   // That is 4 required plus up to 3 optional => total 4..7
+   if (argc < 4 || argc > 7) {
+-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 4..6)", argc);
++    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 4..7)", argc);
+   }
+ 
+   mx::array& q = get_array(argv[0]);
+   mx::array& k = get_array(argv[1]);
+@@ -396,8 +468,11 @@ static VALUE fast_scaled_dot_product_attention(int argc, VALUE* argv, VALUE self)
+   VALUE mask = (argc > 4) ? argv[4] : Qnil;
+   VALUE memory_efficient_threshold = (argc > 5) ? argv[5] : Qnil;
+ 
+-  // 6th argument could be 'stream'
++  // 7th argument is 'stream'
+   VALUE stream_val = (argc > 6) ? argv[6] : Qnil;
++  mx::StreamOrDevice s = parse_stream_or_device(stream_val);
+ 
+   // We'll handle mask and memory_efficient_threshold in a similar style
+   if (NIL_P(mask)) {
+@@ -408,13 +483,15 @@ static VALUE fast_scaled_dot_product_attention(int argc, VALUE* argv, VALUE self)
+       mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, std::monostate{}, threshold, s);
+       return wrap_array(result);
+     } else {
+-      mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val);
++      mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, std::monostate{}, std::nullopt, s);
+       return wrap_array(result);
+     }
+   } else if (RB_TYPE_P(mask, T_STRING)) {
+     std::string mask_str = StringValueCStr(mask);
+     if (!NIL_P(memory_efficient_threshold)) {
+       int threshold = NUM2INT(memory_efficient_threshold);
+-      mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, mask_str, threshold);
++      mx::array result =
++          mx::fast::scaled_dot_product_attention(q, k, v, scale_val, mask_str, threshold, s);
+       return wrap_array(result);
+     } else {
+       mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, mask_str, std::nullopt, s);
+@@ -422,7 +499,8 @@ static VALUE fast_scaled_dot_product_attention(int argc, VALUE* argv, VALUE self)
+     mx::array& m = get_array(mask);
+     if (!NIL_P(memory_efficient_threshold)) {
+       int threshold = NUM2INT(memory_efficient_threshold);
+-      mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, m, threshold);
++      mx::array result =
++          mx::fast::scaled_dot_product_attention(q, k, v, scale_val, m, threshold, s);
+       return wrap_array(result);
+     } else {
+       mx::array result = mx::fast::scaled_dot_product_attention(q, k, v, scale_val, m, std::nullopt, s);
+@@ -467,17 +545,21 @@ static VALUE metal_kernel_callback(VALUE self, VALUE args) {
+   VALUE init_value_val = rb_hash_aref(args, ID2SYM(rb_intern("init_value")));
+   VALUE verbose_val = rb_hash_aref(args, ID2SYM(rb_intern("verbose")));
+ 
+-  // We need at least inputs, output_shapes, output_dtypes, grid, threadgroup
++  // We need at least inputs, output_shapes, output_dtypes, grid, threadgroup.
++  // Python also has a final optional 'stream' param.
+   if (NIL_P(inputs_val) || NIL_P(output_shapes_val) || NIL_P(output_dtypes_val) ||
+       NIL_P(grid_val) || NIL_P(threadgroup_val)) {
+     rb_raise(rb_eArgError, "Required arguments missing: inputs, output_shapes, output_dtypes, grid, threadgroup");
+   }
+ 
+   // ...
+   // Template arguments, init_value, verbose already handled.
+   // Now parse an optional 'stream' from the Hash as well:
++  VALUE stream_val = rb_hash_aref(args, ID2SYM(rb_intern("stream")));
++  mx::StreamOrDevice s = parse_stream_or_device(stream_val);
+ 
+   // Run kernel
+   auto result_arrays = wrapper->kernel_func(
+       inputs,
+       output_shapes,
+       output_dtypes,
+       grid,
+       threadgroup,
+       template_args,
+       init_value,
+       verbose,
+-      {}
++      s
+   );
+ 
+   // Wrap results
+@@ -513,7 +595,8 @@ static VALUE fast_metal_kernel(VALUE self, VALUE name, VALUE input_names, VALUE
+   // ...
+   auto kernel = mx::fast::metal_kernel(
+       name_str,
+       input_names_vec,
+       output_names_vec,
+       source_str,
+       header_str,
+       ensure_contiguous,
+       atomic_out);
+ 
+   auto wrapper = new MetalKernelWrapper();
+   wrapper->kernel_func = std::move(kernel);
+ 
+   VALUE data = Data_Wrap_Struct(rb_cObject, 0, metal_kernel_free, wrapper);
+ 
+-  // Create a Ruby Proc that calls the kernel via metal_kernel_callback
++  // Create a Ruby Proc that calls the kernel via metal_kernel_callback.
++  // This Proc now also supports an optional :stream argument in the Hash.
+   VALUE proc = rb_proc_new(RUBY_METHOD_FUNC(metal_kernel_callback), Qnil);
+   rb_iv_set(proc, "@metal_kernel_wrapper", data);
+ 

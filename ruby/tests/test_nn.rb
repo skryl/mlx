@@ -126,19 +126,19 @@ class TestNN < MLXTestCase
     sigmoid = MLX::NN::Layers::Sigmoid.new
     sigmoid_out = sigmoid.call(x)
     expected = MLX.array([
-      1.0 / (1.0 + Math.exp(2.0)),
-      1.0 / (1.0 + Math.exp(1.0)),
+      1.0 / (1.0 + Ops.exp(2.0)),
+      1.0 / (1.0 + Ops.exp(1.0)),
       0.5,
-      1.0 / (1.0 + Math.exp(-1.0)),
-      1.0 / (1.0 + Math.exp(-2.0))
+      1.0 / (1.0 + Ops.exp(-1.0)),
+      1.0 / (1.0 + Ops.exp(-2.0))
     ])
     assert_array_equal(sigmoid_out, expected)
     
     # Test Tanh
     tanh = MLX::NN::Layers::Tanh.new
     tanh_out = tanh.call(x)
-    expected = MLX.array([Math.tanh(-2.0), Math.tanh(-1.0), Math.tanh(0.0), 
-                           Math.tanh(1.0), Math.tanh(2.0)])
+    expected = MLX.array([Ops.tanh(-2.0), Ops.tanh(-1.0), Ops.tanh(0.0), 
+                           Ops.tanh(1.0), Ops.tanh(2.0)])
     assert_array_equal(tanh_out, expected)
     
     # Test Leaky ReLU

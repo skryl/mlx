@@ -17,13 +17,13 @@ module MLX
           
           # Create position encodings
           position = MLX::Array.arange(0, max_len).reshape(max_len, 1)
-          div_term = MLX::Math.exp(
-            MLX::Array.arange(0, embedding_dim, 2) * (-Math.log(10000.0) / embedding_dim)
+          div_term = MLX::Ops.exp(
+            MLX::Array.arange(0, embedding_dim, 2) * (-Ops.log(10000.0) / embedding_dim)
           )
           
           pe = MLX::Array.zeros([max_len, embedding_dim])
-          pe[:":", :"::2"] = MLX::Math.sin(position * div_term)
-          pe[:":", :"1::2"] = MLX::Math.cos(position * div_term)
+          pe[:":", :"::2"] = MLX::Ops.sin(position * div_term)
+          pe[:":", :"1::2"] = MLX::Ops.cos(position * div_term)
           pe = pe.reshape(1, max_len, embedding_dim)
           
           # Register as buffer (not a trainable parameter)
@@ -124,7 +124,7 @@ module MLX
           
           # Standard scaled dot-product attention with ALiBi mask
           scores = MLX.matmul(q, k.transpose(0, 1, 3, 2))
-          scores = scores / Math.sqrt(q.shape[-1])
+          scores = scores / Ops.sqrt(q.shape[-1])
           scores = scores + alibi_mask
           
           # Apply softmax and do attention

@@ -166,7 +166,7 @@ class TestRandom < MLXTestCase
       empirical_cov = (data - empirical_mean).T.matmul(data - empirical_mean) / data.shape[0]
       n = data.shape[1]
       
-      delta = 10 * n**2 / Math.sqrt(n_test)
+      delta = 10 * n**2 / Ops.sqrt(n_test)
       assert MLX.allclose(empirical_mean, mean, rtol: 0.0, atol: delta)
       assert MLX.allclose(empirical_cov, cov, rtol: 0.0, atol: delta)
     end

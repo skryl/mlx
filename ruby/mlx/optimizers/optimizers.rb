@@ -219,7 +219,7 @@ module MLX
             # Bias correction
             bias_correction1 = 1 - beta1 ** step
             bias_correction2 = 1 - beta2 ** step
-            step_size = lr * Math.sqrt(bias_correction2) / bias_correction1
+            step_size = lr * Ops.sqrt(bias_correction2) / bias_correction1
             
             # Update parameters
             param = MLX.subtract(
@@ -332,7 +332,7 @@ module MLX
             # Bias correction
             bias_correction1 = 1 - beta1 ** step
             bias_correction2 = 1 - beta2 ** step
-            step_size = lr * Math.sqrt(bias_correction2) / bias_correction1
+            step_size = lr * Ops.sqrt(bias_correction2) / bias_correction1
             
             # Update parameters
             param_update = MLX.divide(MLX.multiply(step_size, exp_avg), denom)
@@ -954,7 +954,7 @@ module MLX
             # Compute learning rate
             if relative_step
               min_step = warmup_init ? 1e-6 * step : 1e-2
-              lr_t = [min_step, 1.0 / Math.sqrt(step)].min
+              lr_t = [min_step, 1.0 / Ops.sqrt(step)].min
               lr_t = lr_t * lr
             else
               lr_t = lr
@@ -965,9 +965,9 @@ module MLX
             if clip_threshold > 0
               # Calculate RMS of gradient
               if factored
-                rms = Math.sqrt(MLX.mean(MLX.square(grad)))
+                rms = Ops.sqrt(MLX.mean(MLX.square(grad)))
               else
-                rms = MLX.core.norm(grad) / Math.sqrt(grad.size)
+                rms = MLX.core.norm(grad) / Ops.sqrt(grad.size)
               end
               
               # Apply clipping
@@ -1044,12 +1044,12 @@ module MLX
               scale = 1.0
               if param.ndim >= 2
                 # For matrices, use the geometric mean of row and column averages
-                scale = Math.sqrt(
-                  Math.sqrt(MLX.mean(exp_avg_sq_row) * MLX.mean(exp_avg_sq_col))
+                scale = Ops.sqrt(
+                  Ops.sqrt(MLX.mean(exp_avg_sq_row) * MLX.mean(exp_avg_sq_col))
                 )
               else
                 # For vectors, use RMS
-                scale = Math.sqrt(MLX.mean(exp_avg_sq))
+                scale = Ops.sqrt(MLX.mean(exp_avg_sq))
               end
               scale = [scale, eps2].max
               scaled_grad = MLX.divide(scaled_grad, scale)

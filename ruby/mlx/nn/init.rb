@@ -4,14 +4,14 @@ module MLX
       # Xavier/Glorot uniform initialization
       def self.xavier_uniform(shape, gain = 1.0)
         fan_in, fan_out = compute_fans(shape)
-        bound = gain * Math.sqrt(6.0 / (fan_in + fan_out))
+        bound = gain * Ops.sqrt(6.0 / (fan_in + fan_out))
         MLX.random_uniform(-bound, bound, shape)
       end
       
       # Xavier/Glorot normal initialization
       def self.xavier_normal(shape, gain = 1.0)
         fan_in, fan_out = compute_fans(shape)
-        std = gain * Math.sqrt(2.0 / (fan_in + fan_out))
+        std = gain * Ops.sqrt(2.0 / (fan_in + fan_out))
         MLX.random_normal(0.0, std, shape)
       end
       
@@ -20,7 +20,7 @@ module MLX
         fan_in, fan_out = compute_fans(shape)
         fan = (mode == 'fan_in') ? fan_in : fan_out
         gain = calculate_gain(nonlinearity, gain)
-        bound = gain * Math.sqrt(3.0 / fan)
+        bound = gain * Ops.sqrt(3.0 / fan)
         MLX.random_uniform(-bound, bound, shape)
       end
       
@@ -29,7 +29,7 @@ module MLX
         fan_in, fan_out = compute_fans(shape)
         fan = (mode == 'fan_in') ? fan_in : fan_out
         gain = calculate_gain(nonlinearity, gain)
-        std = gain / Math.sqrt(fan)
+        std = gain / Ops.sqrt(fan)
         MLX.random_normal(0.0, std, shape)
       end
       
@@ -143,10 +143,10 @@ module MLX
         when 'tanh'
           5.0 / 3.0
         when 'relu'
-          Math.sqrt(2.0)
+          Ops.sqrt(2.0)
         when 'leaky_relu'
           negative_slope = param || 0.01
-          Math.sqrt(2.0 / (1 + negative_slope ** 2))
+          Ops.sqrt(2.0 / (1 + negative_slope ** 2))
         when 'selu'
           1.0  # SELU should use 1.0 as recommended
         else

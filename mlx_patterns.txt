@@ -398,9 +398,9 @@ MLX::Fast.rope(x,
 MLX::Fast.rope_inplace(x,
 MLX::Fast.scaled_dot_product_attention(queries,
 MLX::Linalg`:
-MLX::Math.cos(position
-MLX::Math.exp(
-MLX::Math.sin(position
+MLX::Ops.cos(position
+MLX::Ops.exp(
+MLX::Ops.sin(position
 MLX::Random.uniform(mask_key,
 MLX::Stream"))
 MLX::Utils.clip_by_norm(grads,

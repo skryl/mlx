@@ -17,7 +17,7 @@ class TestFast < MLXTestCase
     
     if freqs.nil?
       inv_freqs = MLX.exp(
-        -MLX.arange(0.0, half_d, dtype: dtype) * (Math.log(base) / half_d)
+        -MLX.arange(0.0, half_d, dtype: dtype) * (Ops.log(base) / half_d)
       )
     else
       inv_freqs = (1.0 / freqs).astype(x.dtype)

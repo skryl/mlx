@@ -77,7 +77,7 @@ class TestFastSDPA < MLXTestCase
     shape_q = transpose ? [b, ql, qh, d] : [b, qh, ql, d]
     shape_kv = transpose ? [b, kl, kh, d] : [b, kh, kl, d]
     
-    scale = 1.0 / Math.sqrt(d)
+    scale = 1.0 / Ops.sqrt(d)
     
     q_mx = (MLX.random.normal(shape: shape_q) * 0.5).astype(dtype)
     k_mx = (MLX.random.normal(shape: shape_kv) * 0.5).astype(dtype)
@@ -141,7 +141,7 @@ class TestFastSDPA < MLXTestCase
     l = r
     dk = 64
     h = 3
-    scale = 1.0 / Math.sqrt(dk)
+    scale = 1.0 / Ops.sqrt(dk)
     
     q_mx = (MLX.random.normal(shape: [1, h, r, dk]) * 1.0).astype(MLX.float32)
     k_mx = (MLX.random.normal(shape: [1, h, r, dk]) * 1.0).astype(MLX.float32)
@@ -203,7 +203,7 @@ class TestFastSDPA < MLXTestCase
     l = 43
     r = 1
     dk = 128
-    scale = 1.0 / Math.sqrt(128.0)
+    scale = 1.0 / Ops.sqrt(128.0)
     
     q_mx = (MLX.random.normal(shape: [1, 32, r, dk]) * 1.0).astype(MLX.float32)
     k_mx = (MLX.random.normal(shape: [1, 32, l, dk]) * 1.0).astype(MLX.float32)

@@ -170,10 +170,10 @@ class TestArray < MLXTestCase
     assert_array_equal(log_result, [0, 0.6931, 2.3026], atol: 1e-4)
     
     # Test sin, cos
-    sin_result = MLX.array([0, Math::PI/2, Math::PI]).sin
+    sin_result = MLX.array([0, MLX.pi/2, MLX.pi]).sin
     assert_array_equal(sin_result, [0, 1, 0], atol: 1e-4)
     
-    cos_result = MLX.array([0, Math::PI/2, Math::PI]).cos
+    cos_result = MLX.array([0, MLX.pi/2, MLX.pi]).cos
     assert_array_equal(cos_result, [1, 0, -1], atol: 1e-4)
   end
   

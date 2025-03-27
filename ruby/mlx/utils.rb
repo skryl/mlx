@@ -252,7 +252,7 @@ module MLX
       elsif norm_type == 2.0
         # L2 norm is the square root of sum of squares
         sum_sq = flat_grads.sum { |_, g| MLX.sum(MLX.square(g)).item }
-        total_norm = Math.sqrt(sum_sq)
+        total_norm = Ops.sqrt(sum_sq)
       else
         # General Lp norm
         sum_powered = flat_grads.sum { |_, g| MLX.sum(MLX.power(MLX.abs(g), norm_type)).item }

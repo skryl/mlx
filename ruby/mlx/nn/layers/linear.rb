@@ -16,12 +16,12 @@ module MLX
           @bias = bias
           
           # Initialize weights
-          weight = MLX::NN::Init.kaiming_uniform([in_features, out_features], Math.sqrt(5))
+          weight = MLX::NN::Init.kaiming_uniform([in_features, out_features], Ops.sqrt(5))
           register_parameter('weight', weight)
           
           if bias
             # Initialize bias
-            bound = 1.0 / Math.sqrt(in_features)
+            bound = 1.0 / Ops.sqrt(in_features)
             bias_tensor = MLX::NN::Init.uniform([out_features], -bound, bound)
             register_parameter('bias', bias_tensor)
           end
@@ -43,10 +43,10 @@ module MLX
         # Reset parameters to their initial values
         def reset_parameters
           fan_in, _ = MLX::NN::Init.compute_fans(@_parameters['weight'].shape)
-          bound = 1.0 / Math.sqrt(fan_in)
+          bound = 1.0 / Ops.sqrt(fan_in)
           
           # Reset weight
-          weight = MLX::NN::Init.kaiming_uniform([@in_features, @out_features], Math.sqrt(5))
+          weight = MLX::NN::Init.kaiming_uniform([@in_features, @out_features], Ops.sqrt(5))
           @_parameters['weight'] = weight
           
           # Reset bias if present
@@ -81,7 +81,7 @@ module MLX
           @bias = bias
           
           # Initialize weights
-          bound = 1.0 / Math.sqrt(in1_features * in2_features)
+          bound = 1.0 / Ops.sqrt(in1_features * in2_features)
           weight = MLX::NN::Init.uniform([out_features, in1_features, in2_features], -bound, bound)
           register_parameter('weight', weight)
           
@@ -127,7 +127,7 @@ module MLX
         
         # Reset parameters to their initial values
         def reset_parameters
-          bound = 1.0 / Math.sqrt(@in1_features * @in2_features)
+          bound = 1.0 / Ops.sqrt(@in1_features * @in2_features)
           
           # Reset weight
           weight = MLX::NN::Init.uniform([@out_features, @in1_features, @in2_features], -bound, bound)

@@ -53,13 +53,25 @@ static VALUE rb_device_equal(VALUE self, VALUE other) {
     return Qfalse;
   }
   
-  mx::Device* self_device;
-  mx::Device* other_device;
-  
+  mx::Device* self_device = nullptr;
   Data_Get_Struct(self, mx::Device, self_device);
-  Data_Get_Struct(other, mx::Device, other_device);
-  
-  return (*self_device == *other_device) ? Qtrue : Qfalse;
+
+  // 1) If 'other' is an Integer, interpret it as a DeviceType
+  if (FIXNUM_P(other)) {
+    int other_type = NUM2INT(other);
+    mx::Device temp((mx::Device::DeviceType) other_type, 0);
+    return (*self_device == temp) ? Qtrue : Qfalse;
+  }
+
+  // 2) If 'other' is a Device, do a direct Device == Device comparison
+  if (rb_obj_is_kind_of(other, rb_class_of(self))) {
+    mx::Device* other_device = nullptr;
+    Data_Get_Struct(other, mx::Device, other_device);
+    return (*self_device == *other_device) ? Qtrue : Qfalse;
+  }
+
+  // 3) Otherwise, return false
+  return Qfalse;
 }
 
 // Device module methods

@@ -44,7 +44,7 @@ keys = MLX.reshape(MLX.array((0...batch_size*seq_len*hidden_size).to_a), [batch_
 values = MLX.reshape(MLX.array((0...batch_size*seq_len*hidden_size).to_a), [batch_size, seq_len, hidden_size])
 
 # Calculate attention
-scale = 1.0 / Math.sqrt(hidden_size / num_heads)
+scale = 1.0 / Ops.sqrt(hidden_size / num_heads)
 puts "Computing scaled dot product attention..."
 attention = MLX::Fast.scaled_dot_product_attention(queries, keys, values, scale)
 puts "Attention output shape: #{attention.shape.inspect}"

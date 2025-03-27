@@ -14,7 +14,7 @@ module MLX
     def self.cosine_decay(init, decay_steps, final = 0.0)
       -> (step) {
         s = [step, decay_steps].min
-        decay = 0.5 * (1.0 + Math.cos((Math::PI / decay_steps) * s))
+        decay = 0.5 * (1.0 + Ops.cos((MLX.pi / decay_steps) * s))
         final + decay * (init - final)
       }
     end
@@ -192,7 +192,7 @@ module MLX
         end
         
         # Calculate cosine decay factor
-        cos_factor = (1 + Math.cos(Math::PI * epoch / @t_max)) / 2.0
+        cos_factor = (1 + Ops.cos(MLX.pi * epoch / @t_max)) / 2.0
         
         # Apply cosine annealing to all base learning rates
         @base_lrs.map do |base_lr|
@@ -523,7 +523,7 @@ module MLX
           if @anneal_strategy == 'cos'
             # Cosine annealing
             phase_ratio = epoch / @step_size_up
-            cos_factor = (1 - Math.cos(phase_ratio * Math::PI)) / 2
+            cos_factor = (1 - Ops.cos(phase_ratio * MLX.pi)) / 2
             @base_lrs.map.with_index do |base_lr, i|
               base_lr + (@max_lr[i] - base_lr) * cos_factor
             end
@@ -539,7 +539,7 @@ module MLX
           if @anneal_strategy == 'cos'
             # Cosine annealing
             phase_ratio = (epoch - @step_size_up) / @step_size_down
-            cos_factor = (1 + Math.cos(phase_ratio * Math::PI)) / 2
+            cos_factor = (1 + Ops.cos(phase_ratio * MLX.pi)) / 2
             @max_lr.map.with_index do |max_lr, i|
               max_lr + (base_lr - max_lr) * cos_factor
             end
@@ -562,7 +562,7 @@ module MLX
           
           if @anneal_strategy == 'cos'
             # Cosine annealing
-            cos_factor = (1 + Math.cos(phase_ratio * Math::PI)) / 2
+            cos_factor = (1 + Ops.cos(phase_ratio * MLX.pi)) / 2
             @base_lrs.map.with_index do |base_lr, i|
               final_lr = base_lr / @final_div_factor
               final_lr + (base_lr - final_lr) * cos_factor
@@ -588,7 +588,7 @@ module MLX
             if @anneal_strategy == 'cos'
               # Cosine annealing
               phase_ratio = epoch / @step_size_up
-              cos_factor = (1 - Math.cos(phase_ratio * Math::PI)) / 2
+              cos_factor = (1 - Ops.cos(phase_ratio * MLX.pi)) / 2
               @optimizer.param_groups.each_with_index do |group, i|
                 group[:momentum] = @max_momentum[i] - (@max_momentum[i] - @base_momentum[i]) * cos_factor
               end
@@ -604,7 +604,7 @@ module MLX
             if @anneal_strategy == 'cos'
               # Cosine annealing
               phase_ratio = (epoch - @step_size_up) / @step_size_down
-              cos_factor = (1 + Math.cos(phase_ratio * Math::PI)) / 2
+              cos_factor = (1 + Ops.cos(phase_ratio * MLX.pi)) / 2
               @optimizer.param_groups.each_with_index do |group, i|
                 group[:momentum] = @base_momentum[i] - (@base_momentum[i] - @max_momentum[i]) * cos_factor
               end
@@ -627,7 +627,7 @@ module MLX
             
             if @anneal_strategy == 'cos'
               # Cosine annealing
-              cos_factor = (1 + Math.cos(phase_ratio * Math::PI)) / 2
+              cos_factor = (1 + Ops.cos(phase_ratio * MLX.pi)) / 2
               @optimizer.param_groups.each_with_index do |group, i|
                 group[:momentum] = @base_momentum[i] - (@base_momentum[i] - @max_momentum[i]) * cos_factor
               end

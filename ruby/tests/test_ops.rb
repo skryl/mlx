@@ -329,11 +329,11 @@ class TestOps < MLXTestCase
     
     # Test exp
     exp_vals = MLX.exp(MLX.array([0.0, 1.0, 2.0]))
-    assert_array_equal(exp_vals, [1.0, Math.exp(1), Math.exp(2)], atol: 1e-5)
+    assert_array_equal(exp_vals, [1.0, Ops.exp(1), Ops.exp(2)], atol: 1e-5)
     
     # Test log
     log_vals = MLX.log(MLX.array([1.0, 2.0, Math::E]))
-    assert_array_equal(log_vals, [0.0, Math.log(2), 1.0], atol: 1e-5)
+    assert_array_equal(log_vals, [0.0, Ops.log(2), 1.0], atol: 1e-5)
     
     # Test log2
     log2_vals = MLX.log2(MLX.array([1.0, 2.0, 4.0, 8.0]))
@@ -345,21 +345,21 @@ class TestOps < MLXTestCase
   end
   
   def test_trig_functions
-    x = MLX.array([0.0, Math::PI/4, Math::PI/2, Math::PI])
+    x = MLX.array([0.0, MLX.pi/4, MLX.pi/2, MLX.pi])
     
     # Test sin
     sin_vals = MLX.sin(x)
-    expected_sin = [0.0, Math.sin(Math::PI/4), 1.0, 0.0]
+    expected_sin = [0.0, Ops.sin(MLX.pi/4), 1.0, 0.0]
     assert_array_equal(sin_vals, expected_sin, atol: 1e-5)
     
     # Test cos
     cos_vals = MLX.cos(x)
-    expected_cos = [1.0, Math.cos(Math::PI/4), 0.0, -1.0]
+    expected_cos = [1.0, Ops.cos(MLX.pi/4), 0.0, -1.0]
     assert_array_equal(cos_vals, expected_cos, atol: 1e-5)
     
     # Test tan
     tan_vals = MLX.tan(x[0..2])  # Skip PI which gives infinity
-    expected_tan = [0.0, Math.tan(Math::PI/4), Float::INFINITY]
+    expected_tan = [0.0, Ops.tan(MLX.pi/4), Float::INFINITY]
     # Use element-wise comparison since infinity requires special handling
     tan_vals.to_list.zip(expected_tan).each do |actual, expected|
       if expected == Float::INFINITY
@@ -480,7 +480,7 @@ class TestOps < MLXTestCase
     
     # Calculate expected values
     max_x = 3.0
-    exp_x = [Math.exp(1.0 - max_x), Math.exp(2.0 - max_x), Math.exp(3.0 - max_x)]
+    exp_x = [Ops.exp(1.0 - max_x), Ops.exp(2.0 - max_x), Ops.exp(3.0 - max_x)]
     sum_exp = exp_x.sum
     expected = exp_x.map { |v| v / sum_exp }
     
@@ -492,13 +492,13 @@ class TestOps < MLXTestCase
     
     # Expected values for first row
     max_row1 = 3.0
-    exp_row1 = [Math.exp(1.0 - max_row1), Math.exp(2.0 - max_row1), Math.exp(3.0 - max_row1)]
+    exp_row1 = [Ops.exp(1.0 - max_row1), Ops.exp(2.0 - max_row1), Ops.exp(3.0 - max_row1)]
     sum_exp_row1 = exp_row1.sum
     expected_row1 = exp_row1.map { |v| v / sum_exp_row1 }
     
     # Expected values for second row
     max_row2 = 6.0
-    exp_row2 = [Math.exp(4.0 - max_row2), Math.exp(5.0 - max_row2), Math.exp(6.0 - max_row2)]
+    exp_row2 = [Ops.exp(4.0 - max_row2), Ops.exp(5.0 - max_row2), Ops.exp(6.0 - max_row2)]
     sum_exp_row2 = exp_row2.sum
     expected_row2 = exp_row2.map { |v| v / sum_exp_row2 }
     

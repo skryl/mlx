@@ -158,7 +158,7 @@ module MLX
           @shard_out_offset = shard_index * @shard_out_features
           
           # Create weight matrix for this shard's portion of outputs
-          scale = 1.0 / Math.sqrt(in_features)
+          scale = 1.0 / Ops.sqrt(in_features)
           weight = MLX::Random.uniform(-scale, scale, [@shard_out_features, in_features])
           register_parameter("weight", weight)
           
@@ -199,7 +199,7 @@ module MLX
           @shard_in_offset = shard_index * @shard_in_features
           
           # Create weight matrix for this shard's portion of inputs
-          scale = 1.0 / Math.sqrt(@shard_in_features)
+          scale = 1.0 / Ops.sqrt(@shard_in_features)
           weight = MLX::Random.uniform(-scale, scale, [out_features, @shard_in_features])
           register_parameter("weight", weight)
           

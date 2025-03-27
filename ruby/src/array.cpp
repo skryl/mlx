@@ -417,6 +417,15 @@ private:
   VALUE indices_;
 };
 
+// Forward-declare the Ruby C-API functions we'll define for ArrayAt:
+static VALUE rb_array_at_aref(VALUE self, VALUE index);
+static VALUE rb_array_at_add(VALUE self, VALUE val);
+static VALUE rb_array_at_subtract(VALUE self, VALUE val);
+static VALUE rb_array_at_multiply(VALUE self, VALUE val);
+static VALUE rb_array_at_divide(VALUE self, VALUE val);
+static VALUE rb_array_at_maximum(VALUE self, VALUE val);
+static VALUE rb_array_at_minimum(VALUE self, VALUE val);
+
 // Ruby GC free function for mx::array
 void rb_free_array(void* ptr) {
   mx::array* arr = static_cast<mx::array*>(ptr);
@@ -583,24 +592,73 @@ VALUE rb_array_div(VALUE self, VALUE other) {
 
 VALUE rb_array_eq(VALUE self, VALUE other) {
   mx::array& arr = get_array(self);
-  
-  if (rb_obj_is_kind_of(other, rb_class_of(self))) {
-    mx::array& other_arr = get_array(other);
-    mx::array result = mx::equal(arr, other_arr);
-    
-    // If all elements are true, return true
-    if (mx::all(result).item<bool>()) {
-      return Qtrue;
-    }
+
+  // Make the operator produce an elementwise boolean array (like Python).
+  ScalarOrArray soa(other);
+  if (!is_comparable_with_array(soa)) {
+    // Python returns false if the rhs is not comparable.
+    return Qfalse;
   }
-  
-  return Qfalse;
+  mx::array result = mx::equal(arr, to_array(soa, arr.dtype()));
+  return Data_Wrap_Struct(rb_class_of(self), 0, rb_free_array,
+                          new mx::array(std::move(result)));
 }
 
 VALUE rb_array_neg(VALUE self) {
   mx::array& arr = get_array(self);
   return Data_Wrap_Struct(rb_class_of(self), 0, rb_free_array, 
                          new mx::array(-arr));
+}
+
+// Provide an "at" method that returns an ArrayAt wrapper, for scatter-add, etc.
+static VALUE rb_array_at(VALUE self) {
+  // Create a new ArrayAt from this array
+  ArrayAt* at_ptr = new ArrayAt(get_array(self));
+  // We'll store it in a Ruby object of class MLX::ArrayAt
+  return Data_Wrap_Struct(rb_path2class("MLX::ArrayAt"), NULL, free, at_ptr);
+}
+
+// Now define the methods on ArrayAt that we declared at the top:
+static VALUE rb_array_at_aref(VALUE self, VALUE index) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  at_ptr->set_indices(index);
+  return self; // Just return self to allow .add(...) etc. after
+}
+
+// Provide to_i and to_f for single-element arrays (similar to Python's __int__ / __float__).
+static VALUE rb_array_to_i(VALUE self) {
+  mx::array& arr = get_array(self);
+  if (arr.size() != 1) {
+    rb_raise(rb_eRuntimeError, "Can only convert size-1 MLX::Array to int");
+  }
+  // Convert the single element to int
+  int val = arr.item<int>();
+  return INT2NUM(val);
+}
+
+static VALUE rb_array_to_f(VALUE self) {
+  mx::array& arr = get_array(self);
+  if (arr.size() != 1) {
+    rb_raise(rb_eRuntimeError, "Can only convert size-1 MLX::Array to float");
+  }
+  double val = arr.item<double>();
+  return DBL2NUM(val);
+}
+
+// coerce method so that "scalar + array" calls our array's operator
+static VALUE rb_array_coerce(VALUE self, VALUE other) {
+  // If other is a numeric (fixnum/float), convert it to an MLX::Array
+  if (RB_TYPE_P(other, T_FIXNUM) || RB_TYPE_P(other, T_FLOAT)) {
+    ScalarOrArray soa(other);
+    mx::array conv = to_array(soa, get_array(self).dtype());
+    VALUE conv_val = Data_Wrap_Struct(rb_class_of(self), 0, rb_free_array,
+                                      new mx::array(std::move(conv)));
+    // Return [converted_other, self]
+    return rb_ary_new3(2, conv_val, self);
+  }
+  // fallback
+  return rb_ary_new3(2, other, self);
 }
 
 VALUE rb_array_lt(VALUE self, VALUE other) {
@@ -1383,13 +1441,15 @@ VALUE rb_array_mod(VALUE self, VALUE other) {
 VALUE rb_array_neq(VALUE self, VALUE other) {
   mx::array& arr = get_array(self);
   ScalarOrArray soa(other);
-  
+
+  // Python returns an elementwise boolean array for "!=" if comparable,
+  // otherwise a single True if not comparable.
   if (!is_comparable_with_array(soa)) {
-    return Qtrue; // Not equal to non-comparable objects
+    return Qtrue;
   }
-  
-  return Data_Wrap_Struct(rb_class_of(self), 0, rb_free_array, 
-                         new mx::array(mx::not_equal(arr, to_array(soa, arr.dtype()))));
+  mx::array result = mx::not_equal(arr, to_array(soa, arr.dtype()));
+  return Data_Wrap_Struct(rb_class_of(self), 0, rb_free_array,
+                          new mx::array(std::move(result)));
 }
 
 // Implement Enumerable support
@@ -1776,15 +1836,6 @@ VALUE rb_array_aset(VALUE self, VALUE index, VALUE val) {
   return Qnil; // Unreachable
 }
 
-// Helper for array.at[idx]
-VALUE rb_array_at_aref(VALUE self, VALUE index) {
-  ArrayAt* at_ptr;
-  Data_Get_Struct(self, ArrayAt, at_ptr);
-  
-  at_ptr->set_indices(index);
-  return self;
-}
-
 void init_array(VALUE module) {
   // Define the Array class
   VALUE array_class = rb_define_class_under(module, "Array", rb_cObject);
@@ -1805,6 +1856,30 @@ void init_array(VALUE module) {
   rb_define_method(array_class, "item", RUBY_METHOD_FUNC(rb_array_item), 0);
   rb_define_method(array_class, "tolist", RUBY_METHOD_FUNC(rb_array_tolist), 0);
   rb_define_method(array_class, "astype", RUBY_METHOD_FUNC(rb_array_astype), -1);
+  
+  // Expose to_i and to_f
+  rb_define_method(array_class, "to_i", RUBY_METHOD_FUNC(rb_array_to_i), 0);
+  rb_define_method(array_class, "to_f", RUBY_METHOD_FUNC(rb_array_to_f), 0);
+  
+  // Expose coerce
+  rb_define_method(array_class, "coerce", RUBY_METHOD_FUNC(rb_array_coerce), 1);
+  
+  // Expose the "at" method returning ArrayAt
+  rb_define_method(array_class, "at", RUBY_METHOD_FUNC(rb_array_at), 0);
+  
+  // Define MLX::ArrayAt class under the same module
+  VALUE array_at_class = rb_define_class_under(module, "ArrayAt", rb_cObject);
+  
+  // "[]" sets the indices to operate on
+  rb_define_method(array_at_class, "[]", RUBY_METHOD_FUNC(rb_array_at_aref), 1);
+  
+  // Now implement add, subtract, multiply, divide, maximum, minimum
+  rb_define_method(array_at_class, "add", RUBY_METHOD_FUNC(rb_array_at_add), 1);
+  rb_define_method(array_at_class, "subtract", RUBY_METHOD_FUNC(rb_array_at_subtract), 1);
+  rb_define_method(array_at_class, "multiply", RUBY_METHOD_FUNC(rb_array_at_multiply), 1);
+  rb_define_method(array_at_class, "divide", RUBY_METHOD_FUNC(rb_array_at_divide), 1);
+  rb_define_method(array_at_class, "maximum", RUBY_METHOD_FUNC(rb_array_at_maximum), 1);
+  rb_define_method(array_at_class, "minimum", RUBY_METHOD_FUNC(rb_array_at_minimum), 1);
   
   // Array indexing
   rb_define_method(array_class, "[]", RUBY_METHOD_FUNC(rb_array_aref), 1);
@@ -1918,4 +1993,47 @@ void init_array(VALUE module) {
   rb_define_const(module, "INTEGER", INT2NUM(static_cast<int>(mx::integer)));
   rb_define_const(module, "NUMBER", INT2NUM(static_cast<int>(mx::number)));
   rb_define_const(module, "GENERIC", INT2NUM(static_cast<int>(mx::generic)));
+} 
+
+static VALUE rb_array_at_add(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->add(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
+}
+static VALUE rb_array_at_subtract(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->subtract(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
+}
+static VALUE rb_array_at_multiply(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->multiply(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
+}
+static VALUE rb_array_at_divide(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->divide(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
+}
+static VALUE rb_array_at_maximum(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->maximum(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
+}
+static VALUE rb_array_at_minimum(VALUE self, VALUE val) {
+  ArrayAt* at_ptr;
+  Data_Get_Struct(self, ArrayAt, at_ptr);
+  mx::array out = at_ptr->minimum(ScalarOrArray(val));
+  return Data_Wrap_Struct(rb_path2class("MLX::Array"), 0, rb_free_array,
+                          new mx::array(std::move(out)));
 } 

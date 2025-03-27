@@ -14,7 +14,7 @@ module MLX
           @sparse = sparse
           
           # Initialize weights with small random values
-          scale = 1.0 / Math.sqrt(embedding_dim)
+          scale = 1.0 / Ops.sqrt(embedding_dim)
           weight = MLX::Random.uniform(-scale, scale, [num_embeddings, embedding_dim])
           
           # If padding_idx is provided, initialize to zeros
@@ -32,7 +32,7 @@ module MLX
         end
         
         def reset_parameters
-          scale = 1.0 / Math.sqrt(@embedding_dim)
+          scale = 1.0 / Ops.sqrt(@embedding_dim)
           weight = MLX::Random.uniform(-scale, scale, [@num_embeddings, @embedding_dim])
           
           if @padding_idx
@@ -54,7 +54,7 @@ module MLX
           @embedding_dim = embedding_dim
           
           # Initialize weights with small random values
-          scale = 1.0 / Math.sqrt(embedding_dim)
+          scale = 1.0 / Ops.sqrt(embedding_dim)
           weight = MLX::Random.uniform(-scale, scale, [num_embeddings, embedding_dim])
           register_parameter("weight", weight)
           

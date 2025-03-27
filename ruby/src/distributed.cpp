@@ -49,18 +49,27 @@ static VALUE group_size(VALUE self) {
   return INT2NUM(group->size());
 }
 
-static VALUE group_split(VALUE self, VALUE color, VALUE key) {
+static VALUE group_split(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  }
+
+  VALUE color = argv[0];
   auto& group = get_group(self);
   int c = NUM2INT(color);
-  int k = NIL_P(key) ? -1 : NUM2INT(key);
-  
+
+  int k = -1;
+  if (argc == 2) {
+    k = NIL_P(argv[1]) ? -1 : NUM2INT(argv[1]);
+  }
+
   auto new_group = group->split(c, k);
-  
+
   // Create a new Group Ruby object
-  VALUE group_class = rb_class_of(self);
+  VALUE group_class = rb_obj_class(self);
   GroupWrapper* wrapper = new GroupWrapper();
   wrapper->group = std::make_shared<mx::distributed::Group>(new_group);
-  
+
   return Data_Wrap_Struct(group_class, 0, group_free, wrapper);
 }
 
@@ -74,6 +83,20 @@ static mx::array& get_array(VALUE obj) {
   mx::array* arr_ptr;
   Data_Get_Struct(obj, mx::array, arr_ptr);
   return *arr_ptr;
+}
+
+// Try to handle scalar or array inputs the same way Python does
+// by automatically converting numeric scalars to 0D arrays.
+static mx::array get_array_or_scalar(VALUE obj) {
+  // If it's numeric (Fixnum or Float in Ruby), wrap it
+  if (RB_TYPE_P(obj, T_FIXNUM) || RB_TYPE_P(obj, T_FLOAT)) {
+    double val = NUM2DBL(obj);
+    // Create a scalar array directly
+    return mx::array(val, mx::float64);
+  } else {
+    // Otherwise, expect an MLX::Core::Array
+    return get_array(obj);
+  }
 }
 
 // Helper to extract StreamOrDevice from Ruby VALUE
@@ -149,7 +172,7 @@ static VALUE distributed_all_sum(int argc, VALUE* argv, VALUE self) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
   }
   
-  mx::array& arr = get_array(argv[0]);
+  mx::array arr = get_array_or_scalar(argv[0]);
   
   VALUE group_obj = Qnil;
   VALUE stream_obj = Qnil;
@@ -181,7 +204,7 @@ static VALUE distributed_all_gather(int argc, VALUE* argv, VALUE self) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
   }
   
-  mx::array& arr = get_array(argv[0]);
+  mx::array arr = get_array_or_scalar(argv[0]);
   
   VALUE group_obj = Qnil;
   VALUE stream_obj = Qnil;
@@ -213,7 +236,7 @@ static VALUE distributed_send(int argc, VALUE* argv, VALUE self) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..4)", argc);
   }
   
-  mx::array& arr = get_array(argv[0]);
+  mx::array arr = get_array_or_scalar(argv[0]);
   int dst = NUM2INT(argv[1]);
   
   VALUE group_obj = Qnil;
@@ -311,7 +334,7 @@ static VALUE distributed_recv_like(int argc, VALUE* argv, VALUE self) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..4)", argc);
   }
   
-  mx::array& arr = get_array(argv[0]);
+  mx::array arr = get_array_or_scalar(argv[0]);
   int src = NUM2INT(argv[1]);
   
   VALUE group_obj = Qnil;
@@ -347,7 +370,7 @@ void init_distributed(VALUE module) {
   rb_define_method(group_class, "initialize", RUBY_METHOD_FUNC(group_initialize), 2);
   rb_define_method(group_class, "rank", RUBY_METHOD_FUNC(group_rank), 0);
   rb_define_method(group_class, "size", RUBY_METHOD_FUNC(group_size), 0);
-  rb_define_method(group_class, "split", RUBY_METHOD_FUNC(group_split), 2);
+  rb_define_method(group_class, "split", RUBY_METHOD_FUNC(group_split), -1);
   
   // Define module functions
   rb_define_module_function(module, "is_available", RUBY_METHOD_FUNC(distributed_is_available), 0);
