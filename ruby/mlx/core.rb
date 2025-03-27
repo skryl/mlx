@@ -316,6 +316,22 @@ module MLX
         new(nil, dtype: dtype, shape: shape)
       end
       
+      # Added arange class method
+      def self.arange(start, stop = nil, step = 1, dtype: nil)
+        # Handle case where only stop is provided
+        if stop.nil?
+          stop = start
+          start = 0
+        end
+        
+        # Calculate the array shape
+        length = ((stop - start) / step.to_f).ceil
+        
+        # Create array with values
+        data = (0...length).map { |i| start + i * step }
+        new(data, dtype: dtype)
+      end
+      
       # Basic properties
       def ndim; @shape.length; end
       def size; @shape.reduce(1, :*); end
@@ -326,7 +342,9 @@ module MLX
       def [](indices); self; end
       def []=(indices, value); self; end
       def item(index = 0); 0; end
-      def tolist; @data || []; end
+      def tolist
+        @data || []
+      end
       def astype(dtype); self.class.new(@data, dtype: dtype, shape: @shape); end
       
       # Mathematical operations
