@@ -805,7 +805,7 @@ static VALUE ops_bitwise_and(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray arg_b = value_to_scalar_or_array(b);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (arg_a.is_array() && arg_b.is_array()) {
     result = mx::bitwise_and(arg_a.array(), arg_b.array(), stream);
@@ -836,7 +836,7 @@ static VALUE ops_bitwise_or(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray arg_b = value_to_scalar_or_array(b);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (arg_a.is_array() && arg_b.is_array()) {
     result = mx::bitwise_or(arg_a.array(), arg_b.array(), stream);
@@ -867,7 +867,7 @@ static VALUE ops_bitwise_xor(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray arg_b = value_to_scalar_or_array(b);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (arg_a.is_array() && arg_b.is_array()) {
     result = mx::bitwise_xor(arg_a.array(), arg_b.array(), stream);
@@ -898,7 +898,7 @@ static VALUE ops_left_shift(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray arg_b = value_to_scalar_or_array(b);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (arg_a.is_array() && arg_b.is_array()) {
     result = mx::left_shift(arg_a.array(), arg_b.array(), stream);
@@ -929,7 +929,7 @@ static VALUE ops_right_shift(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray arg_b = value_to_scalar_or_array(b);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (arg_a.is_array() && arg_b.is_array()) {
     result = mx::right_shift(arg_a.array(), arg_b.array(), stream);
@@ -958,10 +958,10 @@ static VALUE ops_bitwise_invert(int argc, VALUE* argv, VALUE self) {
   ScalarOrArray a = value_to_scalar_or_array(arr);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result;
+  mx::array result = mx::zeros({1}, mx::bool_); // Initialize with a placeholder
   
   if (a.is_array()) {
-    result = mx::bitwise_not(a.array(), stream);
+    result = mx::bitwise_invert(a.array(), stream);
   } else {
     // Convert to integer for bitwise operation
     int val = static_cast<int>(a.scalar());
@@ -977,14 +977,14 @@ static VALUE ops_view(int argc, VALUE* argv, VALUE self) {
   }
   
   VALUE arr = argv[0];
-  VALUE shape = argv[1];
+  VALUE dtype = argv[1];
   VALUE stream_val = (argc > 2) ? argv[2] : Qnil;
   
   mx::array& a = get_array(arr);
-  std::vector<int> new_shape = ruby_array_to_shape(shape);
+  mx::Dtype dt = int_to_dtype(NUM2INT(dtype));
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result = mx::view(a, new_shape, stream);
+  mx::array result = mx::view(a, dt, stream);
   return wrap_array(result);
 }
 
@@ -1009,46 +1009,8 @@ static VALUE ops_hadamard_transform(int argc, VALUE* argv, VALUE self) {
 }
 
 static VALUE ops_einsum_path(int argc, VALUE* argv, VALUE self) {
-  if (argc < 2) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 2)", argc);
-  }
-  
-  VALUE equation = argv[0];
-  
-  // Convert Ruby string to C string
-  std::string eq_str = RSTRING_PTR(equation);
-  
-  // Extract arrays from the variable arguments
-  std::vector<mx::array> arrays;
-  for (int i = 1; i < argc; i++) {
-    mx::array& arr = get_array(argv[i]);
-    arrays.push_back(arr);
-  }
-  
-  // Call MLX's einsum_path
-  auto result = mx::einsum_path(eq_str, arrays);
-  
-  // Convert result to Ruby array
-  VALUE rb_result = rb_ary_new2(2);
-  
-  // First element: contraction path
-  VALUE path_array = rb_ary_new();
-  for (const auto& step : std::get<0>(result)) {
-    VALUE step_array = rb_ary_new2(2);
-    rb_ary_store(step_array, 0, INT2NUM(step.first));
-    rb_ary_store(step_array, 1, INT2NUM(step.second));
-    rb_ary_push(path_array, step_array);
-  }
-  rb_ary_store(rb_result, 0, path_array);
-  
-  // Second element: sizes of intermediate results
-  VALUE sizes_array = rb_ary_new();
-  for (const auto& size : std::get<1>(result)) {
-    rb_ary_push(sizes_array, INT2NUM(size));
-  }
-  rb_ary_store(rb_result, 1, sizes_array);
-  
-  return rb_result;
+  rb_raise(rb_eNotImpError, "einsum_path not implemented in this example");
+  return Qnil;
 }
 
 static VALUE ops_einsum(int argc, VALUE* argv, VALUE self) {
@@ -1159,56 +1121,31 @@ static VALUE ops_slice(int argc, VALUE* argv, VALUE self) {
   
   Check_Type(slices, T_ARRAY);
   
-  std::vector<mx::array> slice_arrays;
-  std::vector<std::optional<int>> starts;
-  std::vector<std::optional<int>> stops;
-  std::vector<std::optional<int>> strides;
-  
-  // Process slices array
-  for (long i = 0; i < RARRAY_LEN(slices); i++) {
-    VALUE slice_item = rb_ary_entry(slices, i);
+  // Instead of using the complex version with arrays of arrays, 
+  // we'll just use the Shape version for simplicity
+  if (RARRAY_LEN(slices) >= 3) {
+    std::vector<int> start, stop, strides;
     
-    if (rb_obj_is_kind_of(slice_item, rb_path2class("MLX::Core::Array"))) {
-      // This is an index array
-      mx::array& index_arr = get_array(slice_item);
-      slice_arrays.push_back(index_arr);
-      starts.push_back(std::nullopt);
-      stops.push_back(std::nullopt);
-      strides.push_back(std::nullopt);
-    } else if (RB_TYPE_P(slice_item, T_ARRAY)) {
-      // This is a slice spec [start, stop, stride]
-      VALUE slice_spec = slice_item;
-      std::optional<int> start, stop, stride;
-      
-      if (RARRAY_LEN(slice_spec) >= 1 && !NIL_P(rb_ary_entry(slice_spec, 0))) {
-        start = NUM2INT(rb_ary_entry(slice_spec, 0));
-      } else {
-        start = std::nullopt;
-      }
-      
-      if (RARRAY_LEN(slice_spec) >= 2 && !NIL_P(rb_ary_entry(slice_spec, 1))) {
-        stop = NUM2INT(rb_ary_entry(slice_spec, 1));
-      } else {
-        stop = std::nullopt;
-      }
-      
-      if (RARRAY_LEN(slice_spec) >= 3 && !NIL_P(rb_ary_entry(slice_spec, 2))) {
-        stride = NUM2INT(rb_ary_entry(slice_spec, 2));
-      } else {
-        stride = std::nullopt;
-      }
-      
-      slice_arrays.push_back(mx::array()); // Empty placeholder
-      starts.push_back(start);
-      stops.push_back(stop);
-      strides.push_back(stride);
-    } else {
-      rb_raise(rb_eTypeError, "Slice must be an array or a slice specification array");
-    }
+    VALUE start_val = rb_ary_entry(slices, 0);
+    VALUE stop_val = rb_ary_entry(slices, 1);
+    VALUE stride_val = rb_ary_entry(slices, 2);
+    
+    if (RB_TYPE_P(start_val, T_ARRAY)) start = ruby_array_to_shape(start_val);
+    else start.push_back(NUM2INT(start_val));
+    
+    if (RB_TYPE_P(stop_val, T_ARRAY)) stop = ruby_array_to_shape(stop_val);
+    else stop.push_back(NUM2INT(stop_val));
+    
+    if (RB_TYPE_P(stride_val, T_ARRAY)) strides = ruby_array_to_shape(stride_val);
+    else strides.push_back(NUM2INT(stride_val));
+    
+    mx::array result = mx::slice(a, start, stop, strides, stream);
+    return wrap_array(result);
   }
   
-  mx::array result = mx::slice(a, slice_arrays, starts, stops, strides, stream);
-  return wrap_array(result);
+  // Fallback
+  rb_raise(rb_eNotImpError, "slice with complex parameters not fully implemented in this example");
+  return Qnil;
 }
 
 static VALUE ops_slice_update(int argc, VALUE* argv, VALUE self) {
@@ -1227,56 +1164,30 @@ static VALUE ops_slice_update(int argc, VALUE* argv, VALUE self) {
   
   Check_Type(slices, T_ARRAY);
   
-  std::vector<mx::array> slice_arrays;
-  std::vector<std::optional<int>> starts;
-  std::vector<std::optional<int>> stops;
-  std::vector<std::optional<int>> strides;
-  
-  // Process slices array
-  for (long i = 0; i < RARRAY_LEN(slices); i++) {
-    VALUE slice_item = rb_ary_entry(slices, i);
+  // Use the simpler version with Shapes
+  if (RARRAY_LEN(slices) >= 3) {
+    std::vector<int> start, stop, strides;
     
-    if (rb_obj_is_kind_of(slice_item, rb_path2class("MLX::Core::Array"))) {
-      // This is an index array
-      mx::array& index_arr = get_array(slice_item);
-      slice_arrays.push_back(index_arr);
-      starts.push_back(std::nullopt);
-      stops.push_back(std::nullopt);
-      strides.push_back(std::nullopt);
-    } else if (RB_TYPE_P(slice_item, T_ARRAY)) {
-      // This is a slice spec [start, stop, stride]
-      VALUE slice_spec = slice_item;
-      std::optional<int> start, stop, stride;
-      
-      if (RARRAY_LEN(slice_spec) >= 1 && !NIL_P(rb_ary_entry(slice_spec, 0))) {
-        start = NUM2INT(rb_ary_entry(slice_spec, 0));
-      } else {
-        start = std::nullopt;
-      }
-      
-      if (RARRAY_LEN(slice_spec) >= 2 && !NIL_P(rb_ary_entry(slice_spec, 1))) {
-        stop = NUM2INT(rb_ary_entry(slice_spec, 1));
-      } else {
-        stop = std::nullopt;
-      }
-      
-      if (RARRAY_LEN(slice_spec) >= 3 && !NIL_P(rb_ary_entry(slice_spec, 2))) {
-        stride = NUM2INT(rb_ary_entry(slice_spec, 2));
-      } else {
-        stride = std::nullopt;
-      }
-      
-      slice_arrays.push_back(mx::array()); // Empty placeholder
-      starts.push_back(start);
-      stops.push_back(stop);
-      strides.push_back(stride);
-    } else {
-      rb_raise(rb_eTypeError, "Slice must be an array or a slice specification array");
-    }
+    VALUE start_val = rb_ary_entry(slices, 0);
+    VALUE stop_val = rb_ary_entry(slices, 1);
+    VALUE stride_val = rb_ary_entry(slices, 2);
+    
+    if (RB_TYPE_P(start_val, T_ARRAY)) start = ruby_array_to_shape(start_val);
+    else start.push_back(NUM2INT(start_val));
+    
+    if (RB_TYPE_P(stop_val, T_ARRAY)) stop = ruby_array_to_shape(stop_val);
+    else stop.push_back(NUM2INT(stop_val));
+    
+    if (RB_TYPE_P(stride_val, T_ARRAY)) strides = ruby_array_to_shape(stride_val);
+    else strides.push_back(NUM2INT(stride_val));
+    
+    mx::array result = mx::slice_update(a, update, start, stop, strides, stream);
+    return wrap_array(result);
   }
   
-  mx::array result = mx::slice_update(a, update, slice_arrays, starts, stops, strides, stream);
-  return wrap_array(result);
+  // Fallback
+  rb_raise(rb_eNotImpError, "slice_update with complex parameters not fully implemented in this example");
+  return Qnil;
 }
 
 static VALUE ops_contiguous(int argc, VALUE* argv, VALUE self) {
@@ -1306,11 +1217,24 @@ static VALUE ops_unflatten(int argc, VALUE* argv, VALUE self) {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // divmod(a, b, stream=None)
 static VALUE ops_divmod(int argc, VALUE* argv, VALUE self) {
-  CHECK_ARITY("divmod", 2, 3);
+  if (argc < 2 || argc > 3) {
+    rb_raise(rb_eArgError, "divmod: wrong number of arguments (given %d, expected 2..3)", argc);
+  }
+  
   SCALAR_OR_ARRAY(a, argv[0]);
   SCALAR_OR_ARRAY(b, argv[1]);
   GET_STREAM(stream, (argc == 3) ? argv[2] : Qnil);
-  RETURN_ARRAY(mx::divmod(a, b, stream));
+  
+  // divmod returns a tuple [quotient, remainder]
+  // Since divmod returns a std::tuple<array,array>, we need to return an array of arrays
+  auto result = mx::divmod(a, b, stream);
+  
+  // Create Ruby array with two elements: quotient and remainder
+  VALUE rb_result = rb_ary_new2(2);
+  rb_ary_store(rb_result, 0, wrap_array(std::get<0>(result)));
+  rb_ary_store(rb_result, 1, wrap_array(std::get<1>(result)));
+  
+  return rb_result;
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1725,7 +1649,7 @@ static VALUE ops_take(int argc, VALUE* argv, VALUE self) {
   }
   if (argc == 4) stream_val = argv[3];
 
-  mx::array indices;
+  mx::array indices = mx::zeros({1}, mx::int32); // Default initialization
   if (rb_obj_is_kind_of(indices_val, rb_path2class("MLX::Core::Array"))) {
     indices = get_array(indices_val);
   } else if (FIXNUM_P(indices_val)) {
@@ -3075,7 +2999,7 @@ static VALUE ops_trace(int argc, VALUE* argv, VALUE self) {
   }
   mx::array& arr = get_array(argv[0]);
   int offset=0, axis1=0, axis2=1;
-  mx::Dtype dt = (mx::Dtype)-1; // sentinel for none
+  std::optional<mx::Dtype> dt = std::nullopt; // Use optional instead of sentinel value
   VALUE stream_val = Qnil;
   if (argc >= 2) offset = NUM2INT(argv[1]);
   if (argc >= 3) axis1 = NUM2INT(argv[2]);
@@ -3084,10 +3008,10 @@ static VALUE ops_trace(int argc, VALUE* argv, VALUE self) {
   if (argc == 6) stream_val = argv[5];
   GET_STREAM(stream, stream_val);
 
-  if ((int)dt < 0) {
+  if (!dt.has_value()) {
     RETURN_ARRAY(mx::trace(arr, offset, axis1, axis2, stream));
   } else {
-    RETURN_ARRAY(mx::trace(arr, offset, axis1, axis2, dt, stream));
+    RETURN_ARRAY(mx::trace(arr, offset, axis1, axis2, dt.value(), stream));
   }
 }
 
@@ -3229,7 +3153,8 @@ static VALUE ops_hadamard_transform(int argc, VALUE* argv, VALUE self) {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // einsum_path(subscripts, *operands)
 static VALUE ops_einsum_path(int argc, VALUE* argv, VALUE self) {
-  rb_raise(rb_eNotImpError, "einsum_path not implemented in example");
+  rb_raise(rb_eNotImpError, "einsum_path not implemented in this example");
+  return Qnil;
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3349,8 +3274,10 @@ static VALUE ops_contiguous(int argc, VALUE* argv, VALUE self) {
   VALUE stream_val = Qnil;
   if (argc >= 2) allow_col = (argv[1] == Qtrue);
   if (argc == 3) stream_val = argv[2];
-  GET_STREAM(stream, stream_val);
-  RETURN_ARRAY(mx::contiguous(a, allow_col, stream));
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
+  
+  mx::array result = mx::contiguous(a, allow_col, stream);
+  return wrap_array(result);
 }
 
 // Initialize ops module
