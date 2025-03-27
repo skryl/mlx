@@ -390,7 +390,6 @@ class TestArray < MLXTestCase
   end
   
   def test_squeeze
-    skip "Implementing in a future version"
     # Test basic squeeze
     x = MLX.array([[[1], [2], [3]]])
     y = x.squeeze
@@ -415,7 +414,6 @@ class TestArray < MLXTestCase
   end
   
   def test_expand_dims
-    skip "Implementing in a future version"
     # Test basic expand_dims
     x = MLX.array([1, 2, 3, 4])
     y = x.expand_dims(axis: 0)
@@ -442,7 +440,6 @@ class TestArray < MLXTestCase
   end
   
   def test_permute_dims
-    skip "Implementing in a future version"
     # Test basic permute_dims (equivalent to transpose)
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
     y = MLX.transpose(x, axes: [1, 0])
@@ -456,7 +453,6 @@ class TestArray < MLXTestCase
   end
   
   def test_flip
-    skip "Implementing in a future version"
     # Test 1D flip
     x = MLX.array([1, 2, 3, 4])
     y = x.flip
@@ -479,7 +475,6 @@ class TestArray < MLXTestCase
   end
   
   def test_broadcast_to
-    skip "Implementing in a future version"
     # Test basic broadcasting
     x = MLX.array([1, 2, 3])
     y = MLX.broadcast_to(x, [3, 3])
@@ -500,7 +495,6 @@ class TestArray < MLXTestCase
   end
   
   def test_tile
-    skip "Implementing in a future version"
     # Test basic tiling
     x = MLX.array([1, 2, 3])
     y = MLX.tile(x, [2])
@@ -531,7 +525,6 @@ class TestArray < MLXTestCase
   end
   
   def test_pad
-    skip "Implementing in a future version"
     # Test basic padding
     x = MLX.array([[1, 2], [3, 4]])
     y = MLX.pad(x, [[1, 1], [1, 1]])
@@ -570,7 +563,6 @@ class TestArray < MLXTestCase
   end
   
   def test_swapaxes
-    skip "Implementing in a future version"
     # Test basic swapaxes
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
     y = x.swapaxes(0, 1)
@@ -588,7 +580,6 @@ class TestArray < MLXTestCase
   end
   
   def test_moveaxis
-    skip "Implementing in a future version"
     # Test basic moveaxis
     x = MLX.reshape(MLX.arange(0, 24), [2, 3, 4])
     y = x.moveaxis(0, 2)
@@ -604,7 +595,6 @@ class TestArray < MLXTestCase
   end
   
   def test_diag
-    skip "Implementing in a future version"
     # Test 1D to 2D diagonal
     x = MLX.array([1, 2, 3])
     y = x.diag

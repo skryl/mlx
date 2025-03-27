@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require_relative 'mlx_test_case'
+require_relative '../mlx_test_case'
 
 # Define a class for testing MLX call patterns
 class TestCallPatterns < MLXTestCase

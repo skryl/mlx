@@ -66,19 +66,20 @@ module MLX
       end unless respond_to?(accessor_name)
     end
 
-    # Define accessor method for Array
-    define_singleton_method(:array) do
-      Core::Array
-    end
-
     # Delegate static MLX.method calls to static module or class methods
     class << self
       def method_missing(name, *args, &block)
-        target_mod = Core.modules.find { |mod| mod.respond_to?(name) }
-        return target_mod.public_send(name, *args, &block) if target_mod
+        target_mod = (Core.modules + Core.classes).find { |mod| mod.respond_to?(name) }
         
-        target_class = Core.classes.find { |klass| klass.respond_to?(name) }
-        return target_class.public_send(name, *args, &block) if target_class
+        if target_mod
+          if args.length > 0
+            # If the method returns a class and we're passing arguments, we need to instantiate it
+            return target_mod.public_send(name).send(:new, *args, &block)
+          else
+            # If the method returns a class and we're not passing arguments, we can just call it
+            return target_mod.public_send(name, &block)
+          end
+        end
         
         super
       end
