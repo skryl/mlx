@@ -1,6 +1,6 @@
 // Copyright © 2023-2024 Apple Inc.
 
-#include "python/src/trees.h"
+#include "trees.h"
 
 template <typename T, typename U, typename V>
 void validate_subtrees(const std::vector<nb::object>& subtrees) {

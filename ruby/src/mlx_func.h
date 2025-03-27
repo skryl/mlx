@@ -1,33 +1,29 @@
 #pragma once
 
 #include <ruby.h>
+#include <functional>
+#include <vector>
 #include "mlx/array.h"
 
-// Function to extract Ruby value or MLX array from a parameter
-struct ScalarOrArray {
-  enum class Type { Scalar, Array };
-  
-  Type type;
-  union {
-    double scalar;
-    mlx::core::array array;
-  };
-  
-  ~ScalarOrArray() {
-    if (type == Type::Array) {
-      array.~array();
-    }
-  }
-  
-  ScalarOrArray(double scalar_val) : type(Type::Scalar), scalar(scalar_val) {}
-  ScalarOrArray(const mlx::core::array& array_val) : type(Type::Array), array(array_val) {}
-  
-  bool is_scalar() const { return type == Type::Scalar; }
-  bool is_array() const { return type == Type::Array; }
-};
+namespace mx = mlx::core;
 
-// Convert Ruby value to ScalarOrArray
-ScalarOrArray value_to_scalar_or_array(VALUE value);
+// A function wrapper that properly handles Ruby GC
+// and dependency tracking
+
+// Typedefs for function types
+typedef std::function<mx::array(const std::vector<mx::array>&)> RubyMlxFunction;
+typedef std::function<std::pair<mx::array, std::vector<mx::array>>(const std::vector<mx::array>&)> RubyMlxFunctionWithAux;
+
+// Create a GC-aware function wrapper
+VALUE mlx_func_create(VALUE func, std::vector<VALUE> deps);
+
+// Version with function object directly
+template <typename F>
+VALUE mlx_func_create(F func, std::vector<VALUE> deps = {}) {
+  // Create a wrapper around the C++ function
+  // This will be implemented in the .cpp file
+  return mlx_func_create(func, deps);
+}
 
 // Initialize the mlx function module
 void init_mlx_func(VALUE module); 

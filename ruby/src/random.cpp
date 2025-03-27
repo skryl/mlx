@@ -1,4 +1,5 @@
 #include <ruby.h>
+#include <chrono>
 #include "mlx/random.h"
 #include "mlx/ops.h"
 
@@ -7,6 +8,58 @@ namespace mx = mlx::core;
 // Helper function to wrap mx::array into Ruby VALUE
 static VALUE wrap_array(const mx::array& arr) {
   return Data_Wrap_Struct(rb_path2class("MLX::Core::Array"), 0, nullptr, new mx::array(arr));
+}
+
+// Helper to extract mx::array from Ruby VALUE
+static mx::array& get_array(VALUE obj) {
+  mx::array* arr_ptr;
+  Data_Get_Struct(obj, mx::array, arr_ptr);
+  return *arr_ptr;
+}
+
+// Helper to extract Stream or Device from Ruby VALUE
+static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
+  if (NIL_P(obj)) {
+    return mx::StreamOrDevice{}; // Default empty stream/device
+  }
+  
+  // Check if it's a Stream object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
+    mx::Stream* stream_ptr;
+    Data_Get_Struct(obj, mx::Stream, stream_ptr);
+    return *stream_ptr;
+  }
+  
+  // Check if it's a Device object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
+    mx::Device* device_ptr;
+    Data_Get_Struct(obj, mx::Device, device_ptr);
+    return *device_ptr;
+  }
+  
+  rb_raise(rb_eTypeError, "Expected Stream or Device object");
+  return mx::StreamOrDevice{}; // Never reached
+}
+
+// Helper function to convert Ruby integer to mx::Dtype
+static mx::Dtype int_to_dtype(int dtype_val) {
+  switch (dtype_val) {
+    case 0: return mx::bool_;
+    case 1: return mx::uint8;
+    case 2: return mx::uint16;
+    case 3: return mx::uint32;
+    case 4: return mx::uint64;
+    case 5: return mx::int8;
+    case 6: return mx::int16;
+    case 7: return mx::int32;
+    case 8: return mx::int64;
+    case 9: return mx::float16;
+    case 10: return mx::float32;
+    case 11: return mx::float64;
+    case 12: return mx::bfloat16;
+    case 13: return mx::complex64;
+    default: return mx::float32; // Default to float32
+  }
 }
 
 // Helper to extract Ruby array into C++ vector
@@ -22,81 +75,429 @@ static std::vector<int> ruby_array_to_vector(VALUE shape) {
   return cpp_shape;
 }
 
+// KeySequence class to manage PRNG keys
+class KeySequence {
+public:
+  explicit KeySequence(uint64_t seed) {
+    state = mx::random::key(seed);
+  }
+  
+  void seed(uint64_t seed_val) {
+    state = mx::random::key(seed_val);
+  }
+  
+  mx::array next() {
+    // Get the split result using pair since the C++ API returns a pair
+    auto split_result = mx::random::split(state);
+    state = split_result.first;
+    return split_result.second;
+  }
+  
+  mx::array state = mx::array(0.0f); // Initialize with a default value
+};
+
+// Global default key generator
+KeySequence& default_key() {
+  auto get_current_time_seed = []() {
+    auto now = std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               now.time_since_epoch())
+        .count();
+  };
+  static KeySequence ks(get_current_time_seed());
+  return ks;
+}
+
+// Convert Ruby key to optional array
+static std::optional<mx::array> get_key_opt(VALUE key_obj) {
+  if (NIL_P(key_obj)) {
+    return std::nullopt;
+  }
+  return get_array(key_obj);
+}
+
 // Random module methods
+static VALUE random_seed(VALUE self, VALUE seed) {
+  uint64_t seed_val = NUM2ULL(seed);
+  default_key().seed(seed_val);
+  return Qnil;
+}
+
 static VALUE random_key(VALUE self, VALUE seed) {
   uint64_t seed_val = NUM2ULL(seed);
   mx::array key = mx::random::key(seed_val);
   return wrap_array(key);
 }
 
-static VALUE random_split(VALUE self, VALUE key, VALUE num) {
-  mx::array* key_ptr;
-  Data_Get_Struct(key, mx::array, key_ptr);
-  
-  int num_val = NUM2INT(num);
-  std::vector<mx::array> keys = mx::random::split(*key_ptr, num_val);
-  
-  VALUE result = rb_ary_new();
-  for (const auto& k : keys) {
-    rb_ary_push(result, wrap_array(k));
+static VALUE random_split(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 3) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
   }
   
-  return result;
-}
-
-static VALUE random_uniform(VALUE self, VALUE key, VALUE shape, VALUE dtype) {
-  mx::array* key_ptr;
-  Data_Get_Struct(key, mx::array, key_ptr);
+  VALUE key_obj = argv[0];
+  VALUE num = (argc > 1) ? argv[1] : INT2NUM(2);
+  VALUE stream_val = (argc > 2) ? argv[2] : Qnil;
   
-  std::vector<int> cpp_shape = ruby_array_to_vector(shape);
-  mx::Dtype d = static_cast<mx::Dtype::Val>(NUM2INT(dtype));
+  mx::array& key_arr = get_array(key_obj);
+  int num_val = NUM2INT(num);
+  mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result = mx::random::uniform(*key_ptr, cpp_shape, d);
+  mx::array result = mx::random::split(key_arr, num_val, stream);
   return wrap_array(result);
 }
 
-static VALUE random_normal(VALUE self, VALUE key, VALUE shape, VALUE dtype) {
-  mx::array* key_ptr;
-  Data_Get_Struct(key, mx::array, key_ptr);
+static VALUE random_uniform(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..6)", argc);
+  }
   
-  std::vector<int> cpp_shape = ruby_array_to_vector(shape);
-  mx::Dtype d = static_cast<mx::Dtype::Val>(NUM2INT(dtype));
+  // Default values
+  double low_val = 0.0;
+  double high_val = 1.0;
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
   
-  mx::array result = mx::random::normal(*key_ptr, cpp_shape, d);
+  // Parse arguments based on position and count
+  if (argc >= 1) low_val = NUM2DBL(argv[0]);
+  if (argc >= 2) high_val = NUM2DBL(argv[1]);
+  if (argc >= 3) shape = ruby_array_to_vector(argv[2]);
+  if (argc >= 4 && !NIL_P(argv[3])) dtype = int_to_dtype(NUM2INT(argv[3]));
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array low_arr = mx::array(low_val);
+  mx::array high_arr = mx::array(high_val);
+  
+  mx::array result = mx::random::uniform(low_arr, high_arr, shape, dtype, key_opt, stream);
   return wrap_array(result);
 }
 
-static VALUE random_randint(VALUE self, VALUE key, VALUE low, VALUE high, VALUE shape, VALUE dtype) {
-  mx::array* key_ptr;
-  Data_Get_Struct(key, mx::array, key_ptr);
+static VALUE random_normal(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..6)", argc);
+  }
   
-  int low_val = NUM2INT(low);
-  int high_val = NUM2INT(high);
-  std::vector<int> cpp_shape = ruby_array_to_vector(shape);
-  mx::Dtype d = static_cast<mx::Dtype::Val>(NUM2INT(dtype));
+  // Default values
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  float loc_val = 0.0f;
+  float scale_val = 1.0f;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
   
-  mx::array result = mx::random::randint(*key_ptr, low_val, high_val, cpp_shape, d);
+  // Parse arguments based on position and count
+  if (argc >= 1 && !NIL_P(argv[0])) shape = ruby_array_to_vector(argv[0]);
+  if (argc >= 2 && !NIL_P(argv[1])) dtype = int_to_dtype(NUM2INT(argv[1]));
+  if (argc >= 3) loc_val = (float)NUM2DBL(argv[2]);
+  if (argc >= 4) scale_val = (float)NUM2DBL(argv[3]);
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array result = mx::random::normal(shape, dtype, loc_val, scale_val, key_opt, stream);
   return wrap_array(result);
 }
 
-static VALUE random_bernoulli(VALUE self, VALUE key, VALUE p, VALUE shape) {
-  mx::array* key_ptr;
-  Data_Get_Struct(key, mx::array, key_ptr);
+static VALUE random_multivariate_normal(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..6)", argc);
+  }
   
-  double p_val = NUM2DBL(p);
-  std::vector<int> cpp_shape = ruby_array_to_vector(shape);
+  VALUE mean = argv[0];
+  VALUE cov = argv[1];
   
-  mx::array result = mx::random::bernoulli(*key_ptr, p_val, cpp_shape);
+  // Default values
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 3 && !NIL_P(argv[2])) shape = ruby_array_to_vector(argv[2]);
+  if (argc >= 4 && !NIL_P(argv[3])) dtype = int_to_dtype(NUM2INT(argv[3]));
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array& mean_arr = get_array(mean);
+  mx::array& cov_arr = get_array(cov);
+  
+  mx::array result = mx::random::multivariate_normal(mean_arr, cov_arr, shape, dtype, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_randint(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..6)", argc);
+  }
+  
+  // Default values
+  int low_val = 0;
+  int high_val = 2; // Default for binary random variable
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::int32;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 1) low_val = NUM2INT(argv[0]);
+  if (argc >= 2) high_val = NUM2INT(argv[1]);
+  if (argc >= 3 && !NIL_P(argv[2])) shape = ruby_array_to_vector(argv[2]);
+  if (argc >= 4 && !NIL_P(argv[3])) dtype = int_to_dtype(NUM2INT(argv[3]));
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array result = mx::random::randint(low_val, high_val, shape, dtype, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_bernoulli(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 5) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..5)", argc);
+  }
+  
+  // Default values
+  float p_val = 0.5f;
+  std::optional<std::vector<int>> shape_opt = std::nullopt;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 1) p_val = (float)NUM2DBL(argv[0]);
+  
+  // Next argument could be shape or key
+  int current_arg = 1;
+  
+  // Check if we have a shape array
+  if (argc > current_arg && !NIL_P(argv[current_arg]) && 
+      rb_obj_is_kind_of(argv[current_arg], rb_cArray)) {
+    shape_opt = ruby_array_to_vector(argv[current_arg]);
+    current_arg++;
+  }
+  
+  // Check if we have a key
+  if (argc > current_arg && !NIL_P(argv[current_arg]) &&
+      rb_obj_is_kind_of(argv[current_arg], rb_path2class("MLX::Core::Array"))) {
+    key_opt = get_array(argv[current_arg]);
+    current_arg++;
+  }
+  
+  // Finally, check for stream
+  if (argc > current_arg) {
+    stream = get_stream_or_device(argv[current_arg]);
+  }
+  
+  // Call the appropriate API function based on arguments
+  mx::array p_arr = mx::array(p_val);
+  mx::array result = mx::array(0.0f); // Initialize with a valid value
+  
+  if (shape_opt.has_value()) {
+    result = mx::random::bernoulli(p_arr, shape_opt.value(), key_opt, stream);
+  } else {
+    result = mx::random::bernoulli(p_arr, key_opt, stream);
+  }
+  
+  return wrap_array(result);
+}
+
+static VALUE random_truncated_normal(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..6)", argc);
+  }
+  
+  // Default values
+  float lower_val = -2.0f;
+  float upper_val = 2.0f;
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 1) lower_val = (float)NUM2DBL(argv[0]);
+  if (argc >= 2) upper_val = (float)NUM2DBL(argv[1]);
+  if (argc >= 3 && !NIL_P(argv[2])) shape = ruby_array_to_vector(argv[2]);
+  if (argc >= 4 && !NIL_P(argv[3])) dtype = int_to_dtype(NUM2INT(argv[3]));
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array lower_arr = mx::array(lower_val);
+  mx::array upper_arr = mx::array(upper_val);
+  
+  mx::array result = mx::random::truncated_normal(lower_arr, upper_arr, shape, dtype, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_categorical(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 5) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..5)", argc);
+  }
+  
+  VALUE logits = argv[0];
+  mx::array& logits_arr = get_array(logits);
+  
+  // Default values
+  int num_samples = 1;
+  int axis = -1;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 2) num_samples = NUM2INT(argv[1]);
+  if (argc >= 3) axis = NUM2INT(argv[2]);
+  
+  // Handle key - use default if not provided
+  if (argc >= 4 && !NIL_P(argv[3])) {
+    key_opt = get_array(argv[3]);
+  }
+  
+  // Handle stream
+  if (argc >= 5) stream = get_stream_or_device(argv[4]);
+  
+  mx::array result = mx::random::categorical(logits_arr, axis, num_samples, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_gumbel(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..4)", argc);
+  }
+  
+  // Default values
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 1 && !NIL_P(argv[0])) shape = ruby_array_to_vector(argv[0]);
+  if (argc >= 2 && !NIL_P(argv[1])) dtype = int_to_dtype(NUM2INT(argv[1]));
+  
+  // Handle key - use default if not provided
+  if (argc >= 3 && !NIL_P(argv[2])) {
+    key_opt = get_array(argv[2]);
+  }
+  
+  // Handle stream
+  if (argc >= 4) stream = get_stream_or_device(argv[3]);
+  
+  mx::array result = mx::random::gumbel(shape, dtype, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_laplace(int argc, VALUE* argv, VALUE self) {
+  if (argc < 0 || argc > 6) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 0..6)", argc);
+  }
+  
+  // Default values
+  std::vector<int> shape = {};
+  mx::Dtype dtype = mx::float32;
+  float loc_val = 0.0f;
+  float scale_val = 1.0f;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 1 && !NIL_P(argv[0])) shape = ruby_array_to_vector(argv[0]);
+  if (argc >= 2 && !NIL_P(argv[1])) dtype = int_to_dtype(NUM2INT(argv[1]));
+  if (argc >= 3) loc_val = (float)NUM2DBL(argv[2]);
+  if (argc >= 4) scale_val = (float)NUM2DBL(argv[3]);
+  
+  // Handle key - use default if not provided
+  if (argc >= 5 && !NIL_P(argv[4])) {
+    key_opt = get_array(argv[4]);
+  }
+  
+  // Handle stream
+  if (argc >= 6) stream = get_stream_or_device(argv[5]);
+  
+  mx::array result = mx::random::laplace(shape, dtype, loc_val, scale_val, key_opt, stream);
+  return wrap_array(result);
+}
+
+static VALUE random_permutation(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  VALUE x = argv[0];
+  
+  // Default values
+  int axis = 0;
+  std::optional<mx::array> key_opt = std::nullopt;
+  mx::StreamOrDevice stream = {};
+  
+  // Parse arguments based on position and count
+  if (argc >= 2) axis = NUM2INT(argv[1]);
+  
+  // Skip the 'independent' parameter, it's not part of the API
+  // Start looking for key at position 2
+  if (argc >= 3 && !NIL_P(argv[2])) {
+    key_opt = get_array(argv[2]);
+  }
+  
+  // Handle stream
+  if (argc >= 4) stream = get_stream_or_device(argv[3]);
+  
+  // Handle x as either an array or a number
+  mx::array result = mx::array(0.0f); // Initialize with a valid value
+  
+  if (rb_obj_is_kind_of(x, rb_path2class("MLX::Core::Array"))) {
+    mx::array& x_arr = get_array(x);
+    result = mx::random::permutation(x_arr, axis, key_opt, stream);
+  } else {
+    int n = NUM2INT(x);
+    result = mx::random::permutation(n, key_opt, stream);
+  }
+  
   return wrap_array(result);
 }
 
 // Initialize random module
 void init_random(VALUE module) {
-  // Define module functions
+  // Define module methods
+  rb_define_module_function(module, "seed", RUBY_METHOD_FUNC(random_seed), 1);
   rb_define_module_function(module, "key", RUBY_METHOD_FUNC(random_key), 1);
-  rb_define_module_function(module, "split", RUBY_METHOD_FUNC(random_split), 2);
-  rb_define_module_function(module, "uniform", RUBY_METHOD_FUNC(random_uniform), 3);
-  rb_define_module_function(module, "normal", RUBY_METHOD_FUNC(random_normal), 3);
-  rb_define_module_function(module, "randint", RUBY_METHOD_FUNC(random_randint), 5);
-  rb_define_module_function(module, "bernoulli", RUBY_METHOD_FUNC(random_bernoulli), 3);
+  rb_define_module_function(module, "split", RUBY_METHOD_FUNC(random_split), -1);
+  rb_define_module_function(module, "uniform", RUBY_METHOD_FUNC(random_uniform), -1);
+  rb_define_module_function(module, "normal", RUBY_METHOD_FUNC(random_normal), -1);
+  rb_define_module_function(module, "multivariate_normal", RUBY_METHOD_FUNC(random_multivariate_normal), -1);
+  rb_define_module_function(module, "randint", RUBY_METHOD_FUNC(random_randint), -1);
+  rb_define_module_function(module, "bernoulli", RUBY_METHOD_FUNC(random_bernoulli), -1);
+  rb_define_module_function(module, "truncated_normal", RUBY_METHOD_FUNC(random_truncated_normal), -1);
+  rb_define_module_function(module, "categorical", RUBY_METHOD_FUNC(random_categorical), -1);
+  rb_define_module_function(module, "gumbel", RUBY_METHOD_FUNC(random_gumbel), -1);
+  rb_define_module_function(module, "laplace", RUBY_METHOD_FUNC(random_laplace), -1);
+  rb_define_module_function(module, "permutation", RUBY_METHOD_FUNC(random_permutation), -1);
 } 

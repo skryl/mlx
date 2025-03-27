@@ -8,9 +8,23 @@ Rake::TestTask.new(:test) do |t|
   t.test_files = FileList["tests/**/*_test.rb", "tests/**/test_*.rb"]
 end
 
+task :clean_ext do
+  FileUtils.rm_rf Dir.glob('ext/mlx/*.o')
+  FileUtils.rm_rf Dir.glob('ext/mlx/Makefile')
+  FileUtils.rm_rf Dir.glob('ext/mlx/core.bundle')
+  FileUtils.rm_rf Dir.glob('tmp')
+end
+
 Rake::ExtensionTask.new("mlx") do |ext|
   ext.lib_dir = "lib/mlx"
   ext.ext_dir = "ext/mlx"
+  ext.config_options = ["--with-cflags=-std=c++17"]
+  
+  # Don't cross compile
+  ext.cross_compile = false
+  
+  # Specify the source pattern for our actual source files
+  ext.source_pattern = "../../src/*.{cpp,h}"
 end
 
 task :default => [:compile, :test] 

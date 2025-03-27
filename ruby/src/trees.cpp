@@ -1,30 +1,20 @@
 #include <ruby.h>
 #include <functional>
+#include <unordered_map>
 #include "trees.h"
+#include "utils.h"
 #include "mlx/utils.h"
 
 namespace mx = mlx::core;
 
-// Helper to extract mx::array from Ruby VALUE
-static mx::array& get_array(VALUE obj) {
-  mx::array* arr_ptr;
-  Data_Get_Struct(obj, mx::array, arr_ptr);
-  return *arr_ptr;
-}
-
-// Helper function to wrap mx::array into Ruby VALUE
-static VALUE wrap_array(const mx::array& arr) {
-  return Data_Wrap_Struct(rb_path2class("MLX::Core::Array"), 0, nullptr, new mx::array(arr));
-}
-
-// Implementation of RubyTreeDef methods
-bool RubyTreeDef::is_leaf(VALUE obj) {
-  // Check if the object is an MLX array or a Ruby non-enumerable
+// Check if an object is a leaf node in the tree
+static bool is_leaf(VALUE obj) {
+  // Check if the object is an MLX array
   if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
     return true;
   }
   
-  // For simplicity, we consider non-array/hash objects as leaves
+  // For non-containers (not array or hash), treat as leaf
   if (!rb_obj_is_kind_of(obj, rb_cArray) && !rb_obj_is_kind_of(obj, rb_cHash)) {
     return true;
   }
@@ -32,14 +22,11 @@ bool RubyTreeDef::is_leaf(VALUE obj) {
   return false;
 }
 
-std::pair<std::vector<VALUE>, std::vector<TreePath>> RubyTreeDef::flatten(VALUE obj) {
-  std::vector<VALUE> leaves;
-  std::vector<TreePath> paths;
-  
-  std::function<void(VALUE, TreePath)> traverse = [&](VALUE node, TreePath path) {
+// Visit each node in a tree
+void tree_visit(VALUE tree, std::function<void(VALUE)> visitor) {
+  std::function<void(VALUE)> recurse = [&](VALUE node) {
     if (is_leaf(node)) {
-      leaves.push_back(node);
-      paths.push_back(path);
+      visitor(node);
       return;
     }
     
@@ -47,172 +34,353 @@ std::pair<std::vector<VALUE>, std::vector<TreePath>> RubyTreeDef::flatten(VALUE 
       long length = RARRAY_LEN(node);
       for (long i = 0; i < length; i++) {
         VALUE item = rb_ary_entry(node, i);
-        TreePath new_path = path;
-        new_path.push_back(i);
-        traverse(item, new_path);
+        recurse(item);
       }
     } else if (rb_obj_is_kind_of(node, rb_cHash)) {
-      // For Hash, we need to sort keys for consistency
       VALUE keys = rb_funcall(node, rb_intern("keys"), 0);
-      VALUE sorted_keys = rb_funcall(keys, rb_intern("sort"), 0);
-      
-      long length = RARRAY_LEN(sorted_keys);
+      long length = RARRAY_LEN(keys);
       for (long i = 0; i < length; i++) {
-        VALUE key = rb_ary_entry(sorted_keys, i);
+        VALUE key = rb_ary_entry(keys, i);
         VALUE item = rb_hash_aref(node, key);
-        TreePath new_path = path;
-        new_path.push_back(i);
-        traverse(item, new_path);
+        recurse(item);
       }
     }
   };
   
-  traverse(obj, {});
-  return {leaves, paths};
+  recurse(tree);
 }
 
-VALUE RubyTreeDef::unflatten(const std::vector<VALUE>& leaves, const std::vector<TreePath>& paths) {
-  if (leaves.empty()) {
-    return Qnil;
-  }
-  
-  if (leaves.size() == 1 && paths[0].empty()) {
-    return leaves[0];
-  }
-  
-  // First, determine the structure and create it
-  std::function<VALUE(const TreePath&, size_t)> create_structure = [&](const TreePath& path, size_t depth) -> VALUE {
-    if (depth >= path.size()) {
-      return Qnil;
+// Visit and update each node in a tree
+VALUE tree_visit_update(VALUE tree, std::function<VALUE(VALUE)> visitor) {
+  std::function<VALUE(VALUE)> recurse = [&](VALUE node) {
+    if (is_leaf(node)) {
+      return visitor(node);
     }
     
-    size_t max_index = 0;
-    for (const auto& p : paths) {
-      if (p.size() > depth && p[depth] > max_index) {
-        max_index = p[depth];
+    if (rb_obj_is_kind_of(node, rb_cArray)) {
+      long length = RARRAY_LEN(node);
+      VALUE result = rb_ary_new2(length);
+      
+      for (long i = 0; i < length; i++) {
+        VALUE item = rb_ary_entry(node, i);
+        VALUE updated = recurse(item);
+        rb_ary_store(result, i, updated);
       }
+      
+      return result;
+    } else if (rb_obj_is_kind_of(node, rb_cHash)) {
+      VALUE result = rb_hash_new();
+      VALUE keys = rb_funcall(node, rb_intern("keys"), 0);
+      
+      long length = RARRAY_LEN(keys);
+      for (long i = 0; i < length; i++) {
+        VALUE key = rb_ary_entry(keys, i);
+        VALUE item = rb_hash_aref(node, key);
+        VALUE updated = recurse(item);
+        rb_hash_aset(result, key, updated);
+      }
+      
+      return result;
     }
     
-    // For simplicity, we'll always use arrays
-    VALUE result = rb_ary_new2(max_index + 1);
-    for (long i = 0; i <= static_cast<long>(max_index); i++) {
-      rb_ary_store(result, i, Qnil);
-    }
-    
-    return result;
+    return node;  // Fallback
   };
   
-  // Create the root structure
-  VALUE root = create_structure(paths[0], 0);
-  
-  // Now fill in the values
-  for (size_t i = 0; i < leaves.size(); i++) {
-    const TreePath& path = paths[i];
-    VALUE leaf = leaves[i];
-    
-    if (path.empty()) {
-      return leaf;  // Single leaf case
-    }
-    
-    VALUE current = root;
-    for (size_t j = 0; j < path.size() - 1; j++) {
-      size_t idx = path[j];
-      VALUE next = rb_ary_entry(current, idx);
-      
-      if (NIL_P(next)) {
-        next = create_structure(path, j + 1);
-        rb_ary_store(current, idx, next);
-      }
-      
-      current = next;
-    }
-    
-    // Store the leaf
-    rb_ary_store(current, path.back(), leaf);
-  }
-  
-  return root;
+  return recurse(tree);
 }
 
-// Tree module methods
-static VALUE tree_flatten(VALUE self, VALUE obj) {
-  auto [leaves, paths] = RubyTreeDef::flatten(obj);
-  
-  // Convert to Ruby format
-  VALUE result = rb_ary_new2(2);
-  
-  // Create the leaves array
-  VALUE rb_leaves = rb_ary_new2(leaves.size());
-  for (size_t i = 0; i < leaves.size(); i++) {
-    rb_ary_store(rb_leaves, i, leaves[i]);
-  }
-  
-  // Create the paths array (array of arrays)
-  VALUE rb_paths = rb_ary_new2(paths.size());
-  for (size_t i = 0; i < paths.size(); i++) {
-    const TreePath& path = paths[i];
-    VALUE rb_path = rb_ary_new2(path.size());
-    
-    for (size_t j = 0; j < path.size(); j++) {
-      rb_ary_store(rb_path, j, INT2NUM(path[j]));
+// Map a function over each leaf in a tree
+VALUE tree_map(VALUE tree, std::function<VALUE(VALUE)> transform) {
+  return tree_visit_update(tree, transform);
+}
+
+// Fill a tree with arrays
+void tree_fill(VALUE tree, const std::vector<mx::array>& values) {
+  size_t index = 0;
+  tree_visit_update(tree, [&](VALUE node) -> VALUE {
+    if (rb_obj_is_kind_of(node, rb_path2class("MLX::Core::Array"))) {
+      if (index < values.size()) {
+        return wrap_array(values[index++]);
+      }
     }
-    
-    rb_ary_store(rb_paths, i, rb_path);
+    return node;
+  });
+}
+
+// Replace arrays in a tree based on source/destination mapping
+void tree_replace(VALUE tree, 
+                 const std::vector<mx::array>& src_arrays,
+                 const std::vector<mx::array>& dst_arrays) {
+  if (src_arrays.size() != dst_arrays.size()) {
+    rb_raise(rb_eArgError, "Source and destination arrays must have the same length");
   }
   
-  rb_ary_store(result, 0, rb_leaves);
-  rb_ary_store(result, 1, rb_paths);
+  std::unordered_map<uintptr_t, mx::array> src_to_dst;
+  for (size_t i = 0; i < src_arrays.size(); ++i) {
+    src_to_dst.insert({src_arrays[i].id(), dst_arrays[i]});
+  }
+  
+  tree_visit_update(tree, [&](VALUE node) -> VALUE {
+    if (rb_obj_is_kind_of(node, rb_path2class("MLX::Core::Array"))) {
+      mx::array& arr = get_array(node);
+      uintptr_t id = arr.id();
+      
+      auto it = src_to_dst.find(id);
+      if (it != src_to_dst.end()) {
+        return wrap_array(it->second);
+      }
+    }
+    return node;
+  });
+}
+
+// Flatten a tree into a vector of arrays
+std::vector<mx::array> tree_flatten(VALUE tree, bool strict) {
+  std::vector<mx::array> flat_arrays;
+  
+  tree_visit(tree, [&](VALUE obj) {
+    if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+      flat_arrays.push_back(get_array(obj));
+    } else if (strict && is_leaf(obj)) {
+      rb_raise(rb_eArgError, "Tree contains non-MLX::Core::Array leaf values");
+    }
+  });
+  
+  return flat_arrays;
+}
+
+// Unflatten arrays into a tree
+VALUE tree_unflatten(VALUE tree, const std::vector<mx::array>& values, int index) {
+  if (index >= static_cast<int>(values.size()) && !values.empty()) {
+    rb_raise(rb_eArgError, "Index out of bounds");
+  }
+  
+  int current_index = index;
+  return tree_visit_update(tree, [&](VALUE obj) -> VALUE {
+    if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+      if (current_index < static_cast<int>(values.size())) {
+        return wrap_array(values[current_index++]);
+      }
+    }
+    return obj;
+  });
+}
+
+// Create a sentinel value for structure preservation
+VALUE tree_sentinel_value() {
+  static VALUE sentinel = Qnil;
+  
+  if (NIL_P(sentinel)) {
+    sentinel = rb_data_object_wrap(rb_cObject, nullptr, nullptr, nullptr);
+  }
+  
+  return sentinel;
+}
+
+// Flatten a tree and capture its structure
+std::pair<std::vector<mx::array>, VALUE> tree_flatten_with_structure(VALUE tree, bool strict) {
+  std::vector<mx::array> flat_arrays;
+  VALUE sentinel = tree_sentinel_value();
+  
+  VALUE structure = tree_visit_update(tree, [&](VALUE obj) -> VALUE {
+    if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+      flat_arrays.push_back(get_array(obj));
+      return sentinel;
+    } else if (strict && !is_leaf(obj)) {
+      rb_raise(rb_eArgError, "Tree contains non-MLX::Core::Array leaf values");
+    }
+    return obj;
+  });
+  
+  return {flat_arrays, structure};
+}
+
+// Unflatten arrays using a structure
+VALUE tree_unflatten_from_structure(VALUE structure, 
+                                   const std::vector<mx::array>& values,
+                                   int index) {
+  if (index >= static_cast<int>(values.size()) && !values.empty()) {
+    rb_raise(rb_eArgError, "Index out of bounds");
+  }
+  
+  VALUE sentinel = tree_sentinel_value();
+  int current_index = index;
+  
+  return tree_visit_update(structure, [&](VALUE obj) -> VALUE {
+    if (obj == sentinel) {
+      if (current_index < static_cast<int>(values.size())) {
+        return wrap_array(values[current_index++]);
+      } else {
+        rb_raise(rb_eArgError, "Not enough arrays to unflatten");
+      }
+    }
+    return obj;
+  });
+}
+
+// Ruby wrapper functions for the C++ API
+
+// Tree flatten function for Ruby
+VALUE rb_tree_flatten(VALUE self, VALUE tree) {
+  auto flat_arrays = tree_flatten(tree, true);
+  
+  VALUE result = rb_ary_new2(flat_arrays.size());
+  for (size_t i = 0; i < flat_arrays.size(); i++) {
+    rb_ary_store(result, i, wrap_array(flat_arrays[i]));
+  }
   
   return result;
 }
 
-static VALUE tree_unflatten(VALUE self, VALUE leaves, VALUE paths) {
-  Check_Type(leaves, T_ARRAY);
-  Check_Type(paths, T_ARRAY);
+// Tree unflatten function for Ruby
+VALUE rb_tree_unflatten(VALUE self, VALUE tree, VALUE values) {
+  Check_Type(values, T_ARRAY);
   
-  // Convert from Ruby format
-  std::vector<VALUE> cpp_leaves;
-  std::vector<TreePath> cpp_paths;
-  
-  for (long i = 0; i < RARRAY_LEN(leaves); i++) {
-    cpp_leaves.push_back(rb_ary_entry(leaves, i));
-  }
-  
-  for (long i = 0; i < RARRAY_LEN(paths); i++) {
-    VALUE rb_path = rb_ary_entry(paths, i);
-    Check_Type(rb_path, T_ARRAY);
-    
-    TreePath path;
-    for (long j = 0; j < RARRAY_LEN(rb_path); j++) {
-      VALUE index = rb_ary_entry(rb_path, j);
-      path.push_back(NUM2INT(index));
+  std::vector<mx::array> cpp_values;
+  for (long i = 0; i < RARRAY_LEN(values); i++) {
+    VALUE v = rb_ary_entry(values, i);
+    if (!rb_obj_is_kind_of(v, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "Expected all elements to be MLX::Core::Array objects");
     }
-    
-    cpp_paths.push_back(path);
+    cpp_values.push_back(get_array(v));
   }
   
-  return RubyTreeDef::unflatten(cpp_leaves, cpp_paths);
+  return tree_unflatten(tree, cpp_values, 0);
 }
 
-static VALUE tree_map(VALUE self, VALUE tree, VALUE func) {
-  // Flatten the tree
-  auto [leaves, paths] = RubyTreeDef::flatten(tree);
-  
-  // Apply the function to each leaf
-  std::vector<VALUE> new_leaves;
-  for (VALUE leaf : leaves) {
-    VALUE result = rb_funcall(func, rb_intern("call"), 1, leaf);
-    new_leaves.push_back(result);
+// Tree map function for Ruby
+VALUE rb_tree_map(VALUE self, VALUE tree, VALUE func) {
+  if (!rb_respond_to(func, rb_intern("call"))) {
+    rb_raise(rb_eTypeError, "Expected callable object");
   }
   
-  // Unflatten with the same structure
-  return RubyTreeDef::unflatten(new_leaves, paths);
+  return tree_visit_update(tree, [&](VALUE obj) -> VALUE {
+    return rb_funcall(func, rb_intern("call"), 1, obj);
+  });
+}
+
+// Tree fill function for Ruby
+VALUE rb_tree_fill(VALUE self, VALUE tree, VALUE values) {
+  Check_Type(values, T_ARRAY);
+  
+  std::vector<mx::array> cpp_values;
+  for (long i = 0; i < RARRAY_LEN(values); i++) {
+    VALUE v = rb_ary_entry(values, i);
+    if (!rb_obj_is_kind_of(v, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "Expected all elements to be MLX::Core::Array objects");
+    }
+    cpp_values.push_back(get_array(v));
+  }
+  
+  tree_fill(tree, cpp_values);
+  return tree;
+}
+
+// Tree replace function for Ruby
+VALUE rb_tree_replace(VALUE self, VALUE tree, VALUE src_values, VALUE dst_values) {
+  Check_Type(src_values, T_ARRAY);
+  Check_Type(dst_values, T_ARRAY);
+  
+  if (RARRAY_LEN(src_values) != RARRAY_LEN(dst_values)) {
+    rb_raise(rb_eArgError, "Source and destination arrays must have the same length");
+  }
+  
+  std::vector<mx::array> src_arrays;
+  std::vector<mx::array> dst_arrays;
+  
+  for (long i = 0; i < RARRAY_LEN(src_values); i++) {
+    VALUE src = rb_ary_entry(src_values, i);
+    VALUE dst = rb_ary_entry(dst_values, i);
+    
+    if (!rb_obj_is_kind_of(src, rb_path2class("MLX::Core::Array")) ||
+        !rb_obj_is_kind_of(dst, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "Expected all elements to be MLX::Core::Array objects");
+    }
+    
+    src_arrays.push_back(get_array(src));
+    dst_arrays.push_back(get_array(dst));
+  }
+  
+  tree_replace(tree, src_arrays, dst_arrays);
+  return tree;
+}
+
+// Tree flatten arrays function for Ruby
+VALUE rb_tree_flatten_arrays(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  }
+  
+  VALUE tree = argv[0];
+  bool strict = (argc > 1) ? RTEST(argv[1]) : true;
+  
+  auto flat_arrays = tree_flatten(tree, strict);
+  
+  VALUE result = rb_ary_new2(flat_arrays.size());
+  for (size_t i = 0; i < flat_arrays.size(); i++) {
+    rb_ary_store(result, i, wrap_array(flat_arrays[i]));
+  }
+  
+  return result;
+}
+
+// Tree flatten with structure function for Ruby
+VALUE rb_tree_flatten_with_structure(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  }
+  
+  VALUE tree = argv[0];
+  bool strict = (argc > 1) ? RTEST(argv[1]) : true;
+  
+  auto [flat_arrays, structure] = tree_flatten_with_structure(tree, strict);
+  
+  VALUE result = rb_ary_new2(2);
+  VALUE array_values = rb_ary_new2(flat_arrays.size());
+  
+  for (size_t i = 0; i < flat_arrays.size(); i++) {
+    rb_ary_store(array_values, i, wrap_array(flat_arrays[i]));
+  }
+  
+  rb_ary_store(result, 0, array_values);
+  rb_ary_store(result, 1, structure);
+  
+  return result;
+}
+
+// Tree unflatten from structure function for Ruby
+VALUE rb_tree_unflatten_from_structure(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 3) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..3)", argc);
+  }
+  
+  VALUE structure = argv[0];
+  VALUE arrays = argv[1];
+  int start_index = (argc > 2) ? NUM2INT(argv[2]) : 0;
+  
+  Check_Type(arrays, T_ARRAY);
+  
+  std::vector<mx::array> cpp_arrays;
+  for (long i = 0; i < RARRAY_LEN(arrays); i++) {
+    VALUE arr = rb_ary_entry(arrays, i);
+    if (!rb_obj_is_kind_of(arr, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "Expected all elements to be MLX::Core::Array objects");
+    }
+    cpp_arrays.push_back(get_array(arr));
+  }
+  
+  return tree_unflatten_from_structure(structure, cpp_arrays, start_index);
 }
 
 // Initialize trees module
 void init_trees(VALUE module) {
   // Define module functions
-  rb_define_module_function(module, "tree_flatten", RUBY_METHOD_FUNC(tree_flatten), 1);
-  rb_define_module_function(module, "tree_unflatten", RUBY_METHOD_FUNC(tree_unflatten), 2);
-  rb_define_module_function(module, "tree_map", RUBY_METHOD_FUNC(tree_map), 2);
+  rb_define_module_function(module, "tree_flatten", RUBY_METHOD_FUNC(rb_tree_flatten), 1);
+  rb_define_module_function(module, "tree_unflatten", RUBY_METHOD_FUNC(rb_tree_unflatten), 2);
+  rb_define_module_function(module, "tree_map", RUBY_METHOD_FUNC(rb_tree_map), 2);
+  rb_define_module_function(module, "tree_fill", RUBY_METHOD_FUNC(rb_tree_fill), 2);
+  rb_define_module_function(module, "tree_replace", RUBY_METHOD_FUNC(rb_tree_replace), 3);
+  rb_define_module_function(module, "tree_flatten_arrays", RUBY_METHOD_FUNC(rb_tree_flatten_arrays), -1);
+  rb_define_module_function(module, "tree_flatten_with_structure", RUBY_METHOD_FUNC(rb_tree_flatten_with_structure), -1);
+  rb_define_module_function(module, "tree_unflatten_from_structure", RUBY_METHOD_FUNC(rb_tree_unflatten_from_structure), -1);
 } 

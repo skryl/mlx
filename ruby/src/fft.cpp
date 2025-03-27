@@ -1,6 +1,8 @@
 #include <ruby.h>
 #include <vector>
+#include <numeric>
 #include "mlx/fft.h"
+#include "mlx/ops.h"
 
 namespace mx = mlx::core;
 
@@ -29,126 +31,432 @@ static std::vector<int> ruby_array_to_vector(VALUE arr) {
   return cpp_arr;
 }
 
+// Helper to extract stream from Ruby object
+static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
+  if (NIL_P(obj)) {
+    return mx::StreamOrDevice{}; // Default empty stream/device
+  }
+  
+  // Check if it's a Stream object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
+    mx::Stream* stream_ptr;
+    Data_Get_Struct(obj, mx::Stream, stream_ptr);
+    return *stream_ptr;
+  }
+  
+  // Check if it's a Device object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
+    mx::Device* device_ptr;
+    Data_Get_Struct(obj, mx::Device, device_ptr);
+    return *device_ptr;
+  }
+  
+  rb_raise(rb_eTypeError, "Expected Stream or Device object");
+  return mx::StreamOrDevice{}; // Never reached
+}
+
 // FFT module methods
-static VALUE fft_fft(VALUE self, VALUE arr, VALUE n, VALUE axis) {
-  mx::array& a = get_array(arr);
-  int ax = NIL_P(axis) ? -1 : NUM2INT(axis);
+static VALUE fft_fft(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: n (int), axis (int), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
   
-  mx::array result;
+  mx::array& a = get_array(argv[0]);
+  VALUE n = (argc > 1) ? argv[1] : Qnil;
+  int axis = (argc > 2) ? NUM2INT(argv[2]) : -1;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
   if (NIL_P(n)) {
-    result = mx::fft::fft(a, std::nullopt, ax);
+    return wrap_array(mx::fft::fft(a, axis, stream));
   } else {
-    result = mx::fft::fft(a, NUM2INT(n), ax);
+    return wrap_array(mx::fft::fft(a, NUM2INT(n), axis, stream));
   }
-  
-  return wrap_array(result);
 }
 
-static VALUE fft_ifft(VALUE self, VALUE arr, VALUE n, VALUE axis) {
-  mx::array& a = get_array(arr);
-  int ax = NIL_P(axis) ? -1 : NUM2INT(axis);
+static VALUE fft_ifft(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: n (int), axis (int), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
   
-  mx::array result;
+  mx::array& a = get_array(argv[0]);
+  VALUE n = (argc > 1) ? argv[1] : Qnil;
+  int axis = (argc > 2) ? NUM2INT(argv[2]) : -1;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
   if (NIL_P(n)) {
-    result = mx::fft::ifft(a, std::nullopt, ax);
+    return wrap_array(mx::fft::ifft(a, axis, stream));
   } else {
-    result = mx::fft::ifft(a, NUM2INT(n), ax);
+    return wrap_array(mx::fft::ifft(a, NUM2INT(n), axis, stream));
   }
-  
-  return wrap_array(result);
 }
 
-static VALUE fft_fft2(VALUE self, VALUE arr, VALUE s, VALUE axes) {
-  mx::array& a = get_array(arr);
-  
-  mx::array result;
-  if (NIL_P(s) && NIL_P(axes)) {
-    result = mx::fft::fft2(a);
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    result = mx::fft::fft2(a, shape);
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::fft2(a, std::nullopt, ax);
-  } else {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::fft2(a, shape, ax);
+static VALUE fft_rfft(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: n (int), axis (int), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
   }
   
-  return wrap_array(result);
+  mx::array& a = get_array(argv[0]);
+  VALUE n = (argc > 1) ? argv[1] : Qnil;
+  int axis = (argc > 2) ? NUM2INT(argv[2]) : -1;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(n)) {
+    return wrap_array(mx::fft::rfft(a, axis, stream));
+  } else {
+    return wrap_array(mx::fft::rfft(a, NUM2INT(n), axis, stream));
+  }
 }
 
-static VALUE fft_ifft2(VALUE self, VALUE arr, VALUE s, VALUE axes) {
-  mx::array& a = get_array(arr);
-  
-  mx::array result;
-  if (NIL_P(s) && NIL_P(axes)) {
-    result = mx::fft::ifft2(a);
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    result = mx::fft::ifft2(a, shape);
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::ifft2(a, std::nullopt, ax);
-  } else {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::ifft2(a, shape, ax);
+static VALUE fft_irfft(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: n (int), axis (int), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
   }
   
-  return wrap_array(result);
+  mx::array& a = get_array(argv[0]);
+  VALUE n = (argc > 1) ? argv[1] : Qnil;
+  int axis = (argc > 2) ? NUM2INT(argv[2]) : -1;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(n)) {
+    return wrap_array(mx::fft::irfft(a, axis, stream));
+  } else {
+    return wrap_array(mx::fft::irfft(a, NUM2INT(n), axis, stream));
+  }
 }
 
-static VALUE fft_fftn(VALUE self, VALUE arr, VALUE s, VALUE axes) {
-  mx::array& a = get_array(arr);
-  
-  mx::array result;
-  if (NIL_P(s) && NIL_P(axes)) {
-    result = mx::fft::fftn(a);
-  } else if (!NIL_P(s) && NIL_P(axes)) {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    result = mx::fft::fftn(a, shape);
-  } else if (NIL_P(s) && !NIL_P(axes)) {
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::fftn(a, std::nullopt, ax);
-  } else {
-    std::vector<int> shape = ruby_array_to_vector(s);
-    std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::fftn(a, shape, ax);
+static VALUE fft_fft2(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
   }
   
-  return wrap_array(result);
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  // Default axes for fft2 is [-2, -1]
+  std::vector<int> default_axes = {-2, -1};
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    // Use default axes
+    return wrap_array(mx::fft::fftn(a, default_axes, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    // Shape provided but no axes - use default axes
+    std::vector<int> shape = ruby_array_to_vector(s);
+    return wrap_array(mx::fft::fftn(a, shape, default_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    // Axes provided but no shape
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::fftn(a, ax, stream));
+  } else {
+    // Both shape and axes provided
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::fftn(a, shape, ax, stream));
+  }
 }
 
-static VALUE fft_ifftn(VALUE self, VALUE arr, VALUE s, VALUE axes) {
-  mx::array& a = get_array(arr);
+static VALUE fft_ifft2(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
   
-  mx::array result;
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  // Default axes for ifft2 is [-2, -1]
+  std::vector<int> default_axes = {-2, -1};
+  
   if (NIL_P(s) && NIL_P(axes)) {
-    result = mx::fft::ifftn(a);
+    // Use default axes
+    return wrap_array(mx::fft::ifftn(a, default_axes, stream));
   } else if (!NIL_P(s) && NIL_P(axes)) {
+    // Shape provided but no axes - use default axes
     std::vector<int> shape = ruby_array_to_vector(s);
-    result = mx::fft::ifftn(a, shape);
+    return wrap_array(mx::fft::ifftn(a, shape, default_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    // Axes provided but no shape
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::ifftn(a, ax, stream));
+  } else {
+    // Both shape and axes provided
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::ifftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_rfft2(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  // Default axes for rfft2 is [-2, -1]
+  std::vector<int> default_axes = {-2, -1};
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    // Use default axes
+    return wrap_array(mx::fft::rfftn(a, default_axes, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    // Shape provided but no axes - use default axes
+    std::vector<int> shape = ruby_array_to_vector(s);
+    return wrap_array(mx::fft::rfftn(a, shape, default_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    // Axes provided but no shape
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::rfftn(a, ax, stream));
+  } else {
+    // Both shape and axes provided
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::rfftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_irfft2(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  // Default axes for irfft2 is [-2, -1]
+  std::vector<int> default_axes = {-2, -1};
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    // Use default axes
+    return wrap_array(mx::fft::irfftn(a, default_axes, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    // Shape provided but no axes - use default axes
+    std::vector<int> shape = ruby_array_to_vector(s);
+    return wrap_array(mx::fft::irfftn(a, shape, default_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    // Axes provided but no shape
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::irfftn(a, ax, stream));
+  } else {
+    // Both shape and axes provided
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::irfftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_fftn(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    return wrap_array(mx::fft::fftn(a, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    if (!RB_TYPE_P(s, T_ARRAY)) {
+      rb_raise(rb_eTypeError, "s must be an array");
+    }
+    std::vector<int> shape = ruby_array_to_vector(s);
+    
+    // For fftn with only shape, we need axes to be supplied
+    // Assume it's all axes
+    std::vector<int> all_axes(shape.size());
+    std::iota(all_axes.begin(), all_axes.end(), 0);
+    return wrap_array(mx::fft::fftn(a, shape, all_axes, stream));
   } else if (NIL_P(s) && !NIL_P(axes)) {
     std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::ifftn(a, std::nullopt, ax);
+    return wrap_array(mx::fft::fftn(a, ax, stream));
   } else {
     std::vector<int> shape = ruby_array_to_vector(s);
     std::vector<int> ax = ruby_array_to_vector(axes);
-    result = mx::fft::ifftn(a, shape, ax);
+    return wrap_array(mx::fft::fftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_ifftn(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
   }
   
-  return wrap_array(result);
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    return wrap_array(mx::fft::ifftn(a, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    if (!RB_TYPE_P(s, T_ARRAY)) {
+      rb_raise(rb_eTypeError, "s must be an array");
+    }
+    std::vector<int> shape = ruby_array_to_vector(s);
+    
+    // For ifftn with only shape, we need axes to be supplied
+    // Assume it's all axes
+    std::vector<int> all_axes(shape.size());
+    std::iota(all_axes.begin(), all_axes.end(), 0);
+    return wrap_array(mx::fft::ifftn(a, shape, all_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::ifftn(a, ax, stream));
+  } else {
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::ifftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_rfftn(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    return wrap_array(mx::fft::rfftn(a, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    if (!RB_TYPE_P(s, T_ARRAY)) {
+      rb_raise(rb_eTypeError, "s must be an array");
+    }
+    std::vector<int> shape = ruby_array_to_vector(s);
+    
+    // For rfftn with only shape, we need axes to be supplied
+    // Assume it's all axes
+    std::vector<int> all_axes(shape.size());
+    std::iota(all_axes.begin(), all_axes.end(), 0);
+    return wrap_array(mx::fft::rfftn(a, shape, all_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::rfftn(a, ax, stream));
+  } else {
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::rfftn(a, shape, ax, stream));
+  }
+}
+
+static VALUE fft_irfftn(int argc, VALUE* argv, VALUE self) {
+  // Required: array
+  // Optional: s (shape), axes (array of ints), stream
+  if (argc < 1 || argc > 4) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
+  }
+  
+  mx::array& a = get_array(argv[0]);
+  VALUE s = (argc > 1) ? argv[1] : Qnil;
+  VALUE axes = (argc > 2) ? argv[2] : Qnil;
+  VALUE stream_val = (argc > 3) ? argv[3] : Qnil;
+  
+  // Extract stream if provided
+  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  if (NIL_P(s) && NIL_P(axes)) {
+    return wrap_array(mx::fft::irfftn(a, stream));
+  } else if (!NIL_P(s) && NIL_P(axes)) {
+    if (!RB_TYPE_P(s, T_ARRAY)) {
+      rb_raise(rb_eTypeError, "s must be an array");
+    }
+    std::vector<int> shape = ruby_array_to_vector(s);
+    
+    // For irfftn with only shape, we need axes to be supplied
+    // Assume it's all axes
+    std::vector<int> all_axes(shape.size());
+    std::iota(all_axes.begin(), all_axes.end(), 0);
+    return wrap_array(mx::fft::irfftn(a, shape, all_axes, stream));
+  } else if (NIL_P(s) && !NIL_P(axes)) {
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::irfftn(a, ax, stream));
+  } else {
+    std::vector<int> shape = ruby_array_to_vector(s);
+    std::vector<int> ax = ruby_array_to_vector(axes);
+    return wrap_array(mx::fft::irfftn(a, shape, ax, stream));
+  }
 }
 
 // Initialize FFT module
 void init_fft(VALUE module) {
   // Define module functions
-  rb_define_module_function(module, "fft", RUBY_METHOD_FUNC(fft_fft), 3);
-  rb_define_module_function(module, "ifft", RUBY_METHOD_FUNC(fft_ifft), 3);
-  rb_define_module_function(module, "fft2", RUBY_METHOD_FUNC(fft_fft2), 3);
-  rb_define_module_function(module, "ifft2", RUBY_METHOD_FUNC(fft_ifft2), 3);
-  rb_define_module_function(module, "fftn", RUBY_METHOD_FUNC(fft_fftn), 3);
-  rb_define_module_function(module, "ifftn", RUBY_METHOD_FUNC(fft_ifftn), 3);
+  rb_define_module_function(module, "fft", RUBY_METHOD_FUNC(fft_fft), -1);
+  rb_define_module_function(module, "ifft", RUBY_METHOD_FUNC(fft_ifft), -1);
+  rb_define_module_function(module, "rfft", RUBY_METHOD_FUNC(fft_rfft), -1);
+  rb_define_module_function(module, "irfft", RUBY_METHOD_FUNC(fft_irfft), -1);
+  rb_define_module_function(module, "fft2", RUBY_METHOD_FUNC(fft_fft2), -1);
+  rb_define_module_function(module, "ifft2", RUBY_METHOD_FUNC(fft_ifft2), -1);
+  rb_define_module_function(module, "rfft2", RUBY_METHOD_FUNC(fft_rfft2), -1);
+  rb_define_module_function(module, "irfft2", RUBY_METHOD_FUNC(fft_irfft2), -1);
+  rb_define_module_function(module, "fftn", RUBY_METHOD_FUNC(fft_fftn), -1);
+  rb_define_module_function(module, "ifftn", RUBY_METHOD_FUNC(fft_ifftn), -1);
+  rb_define_module_function(module, "rfftn", RUBY_METHOD_FUNC(fft_rfftn), -1);
+  rb_define_module_function(module, "irfftn", RUBY_METHOD_FUNC(fft_irfftn), -1);
 } 

@@ -41,6 +41,8 @@ target_link_libraries(core PRIVATE mlx ${RUBY_LIBRARY})
 
 # Set version definition
 target_compile_definitions(core PRIVATE _VERSION_=${MLX_VERSION})
+target_compile_options(core PRIVATE "-flto")
+target_compile_definitions(core PRIVATE NOMINSIZE STABLE_ABI)
 
 # If MLX is built as shared libraries, set the rpath appropriately
 if(BUILD_SHARED_LIBS)
