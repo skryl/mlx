@@ -79,6 +79,30 @@ static std::vector<int> ruby_array_to_vector(VALUE shape) {
   return cpp_shape;
 }
 
+// Helper to extract Stream or Device from Ruby VALUE
+static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
+  if (NIL_P(obj)) {
+    return mx::StreamOrDevice{}; // Default empty stream/device
+  }
+  
+  // Check if it's a Stream object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
+    mx::Stream* stream_ptr;
+    Data_Get_Struct(obj, mx::Stream, stream_ptr);
+    return *stream_ptr;
+  }
+  
+  // Check if it's a Device object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
+    mx::Device* device_ptr;
+    Data_Get_Struct(obj, mx::Device, device_ptr);
+    return *device_ptr;
+  }
+  
+  rb_raise(rb_eTypeError, "Expected Stream or Device object");
+  return mx::StreamOrDevice{}; // Never reached
+}
+
 // KeySequence class to manage PRNG keys
 class KeySequence {
 public:
@@ -520,30 +544,6 @@ static VALUE random_state(VALUE self) {
   // The C++ KeySequence in Ruby only has a single mx::array 'state'.
   // Return that as an MLX::Core::Array Ruby object.
   return wrap_array(default_key().state);
-}
-
-// Helper to extract Stream or Device from Ruby VALUE
-static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
-  if (NIL_P(obj)) {
-    return mx::StreamOrDevice{}; // Default empty stream/device
-  }
-  
-  // Check if it's a Stream object
-  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
-    mx::Stream* stream_ptr;
-    Data_Get_Struct(obj, mx::Stream, stream_ptr);
-    return *stream_ptr;
-  }
-  
-  // Check if it's a Device object
-  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
-    mx::Device* device_ptr;
-    Data_Get_Struct(obj, mx::Device, device_ptr);
-    return *device_ptr;
-  }
-  
-  rb_raise(rb_eTypeError, "Expected Stream or Device object");
-  return mx::StreamOrDevice{}; // Never reached
 }
 
 // Initialize random module
