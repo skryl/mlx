@@ -1017,39 +1017,32 @@ static VALUE ops_einsum(int argc, VALUE* argv, VALUE self) {
   if (argc < 2) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 2)", argc);
   }
+
+  VALUE eq_str = argv[0];
+  Check_Type(eq_str, T_STRING);
   
-  VALUE equation = argv[0];
-  VALUE stream_val = Qnil;
-  
-  // Extract arrays and find stream if present
   std::vector<mx::array> arrays;
-  int arr_end = argc;
-  
-  // Check if last argument is stream
-  if (rb_obj_is_kind_of(argv[argc-1], rb_path2class("MLX::Stream")) ||
-      rb_obj_is_kind_of(argv[argc-1], rb_path2class("MLX::Device"))) {
-    stream_val = argv[argc-1];
-    arr_end = argc - 1;
+  for (int i = 1; i < argc - 1; ++i) {
+    arrays.push_back(get_array(argv[i]));
+  }
+
+  VALUE stream_val = Qnil;
+  if (argc > 1 + arrays.size()) {
+    stream_val = argv[1 + arrays.size()];
   }
   
-  // Convert arrays
-  for (int i = 1; i < arr_end; i++) {
-    mx::array& arr = get_array(argv[i]);
-    arrays.push_back(arr);
-  }
-  
-  std::string eq_str = RSTRING_PTR(equation);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  mx::array result = mx::einsum(eq_str, arrays, stream);
+  // Use mx namespace explicitly to avoid ambiguity
+  mx::array result = mx::einsum(StringValueCStr(eq_str), arrays, stream);
   return wrap_array(result);
 }
 
 static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
   if (argc < 2 || argc > 4) {
-    rb_raise(rb_eArgError, "roll: wrong number of arguments (given %d, expected 2..4)", argc);
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..4)", argc);
   }
-  
+
   VALUE arr = argv[0];
   VALUE shift_val = argv[1];
   VALUE axis_val = Qnil;
@@ -1061,24 +1054,34 @@ static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
   mx::array& a = get_array(arr);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  // Initialize with a default value - using float32 zero as placeholder
-  mx::array result = mx::zeros({1}, mx::float32);
-  
-  if (RB_TYPE_P(shift_val, T_FIXNUM) && RB_TYPE_P(axis_val, T_FIXNUM)) {
-    // Single shift, single axis
-    int shift = NUM2INT(shift_val);
-    int axis = NUM2INT(axis_val);
-    result = mx::roll(a, shift, axis, stream);
-  } else if (RB_TYPE_P(shift_val, T_ARRAY) && RB_TYPE_P(axis_val, T_ARRAY)) {
-    // Multiple shifts, multiple axes
-    std::vector<int> shifts = ruby_array_to_shape(shift_val);
-    std::vector<int> axes = ruby_array_to_shape(axis_val);
-    result = mx::roll(a, shifts, axes, stream);
+  // Now use wrap_array to return the VALUE
+  if (NIL_P(axis_val)) {
+    if (TYPE(shift_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      return wrap_array(mx::roll(a, shift, stream));
+    } else {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      return wrap_array(mx::roll(a, shifts, stream));
+    }
   } else {
-    rb_raise(rb_eTypeError, "shift and axes must be both integers or both arrays");
+    if (TYPE(shift_val) == T_FIXNUM && TYPE(axis_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      int axis = FIX2INT(axis_val);
+      return wrap_array(mx::roll(a, shift, axis, stream));
+    } else if (TYPE(shift_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      std::vector<int> axes = ruby_array_to_shape(axis_val);
+      return wrap_array(mx::roll(a, shift, axes, stream));
+    } else if (TYPE(axis_val) == T_FIXNUM) {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      int axis = FIX2INT(axis_val);
+      return wrap_array(mx::roll(a, shifts, axis, stream));
+    } else {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      std::vector<int> axes = ruby_array_to_shape(axis_val);
+      return wrap_array(mx::roll(a, shifts, axes, stream));
+    }
   }
-  
-  return wrap_array(result);
 }
 
 static VALUE ops_real(int argc, VALUE* argv, VALUE self) {
@@ -3121,7 +3124,8 @@ static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
   if (argc < 2 || argc > 4) {
     rb_raise(rb_eArgError, "roll: wrong number of arguments (given %d, expected 2..4)", argc);
   }
-  mx::array& arr = get_array(argv[0]);
+
+  VALUE arr = argv[0];
   VALUE shift_val = argv[1];
   VALUE axis_val = Qnil;
   VALUE stream_val = Qnil;
@@ -3132,24 +3136,34 @@ static VALUE ops_roll(int argc, VALUE* argv, VALUE self) {
   mx::array& a = get_array(arr);
   mx::StreamOrDevice stream = get_stream_or_device(stream_val);
   
-  // Initialize with a default value - using float32 zero as placeholder
-  mx::array result = mx::zeros({1}, mx::float32);
-  
-  if (RB_TYPE_P(shift_val, T_FIXNUM) && RB_TYPE_P(axis_val, T_FIXNUM)) {
-    // Single shift, single axis
-    int shift = NUM2INT(shift_val);
-    int axis = NUM2INT(axis_val);
-    result = mx::roll(a, shift, axis, stream);
-  } else if (RB_TYPE_P(shift_val, T_ARRAY) && RB_TYPE_P(axis_val, T_ARRAY)) {
-    // Multiple shifts, multiple axes
-    std::vector<int> shifts = ruby_array_to_shape(shift_val);
-    std::vector<int> axes = ruby_array_to_shape(axis_val);
-    result = mx::roll(a, shifts, axes, stream);
+  // Now use wrap_array to return the VALUE
+  if (NIL_P(axis_val)) {
+    if (TYPE(shift_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      return wrap_array(mx::roll(a, shift, stream));
+    } else {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      return wrap_array(mx::roll(a, shifts, stream));
+    }
   } else {
-    rb_raise(rb_eTypeError, "shift and axes must be both integers or both arrays");
+    if (TYPE(shift_val) == T_FIXNUM && TYPE(axis_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      int axis = FIX2INT(axis_val);
+      return wrap_array(mx::roll(a, shift, axis, stream));
+    } else if (TYPE(shift_val) == T_FIXNUM) {
+      int shift = FIX2INT(shift_val);
+      std::vector<int> axes = ruby_array_to_shape(axis_val);
+      return wrap_array(mx::roll(a, shift, axes, stream));
+    } else if (TYPE(axis_val) == T_FIXNUM) {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      int axis = FIX2INT(axis_val);
+      return wrap_array(mx::roll(a, shifts, axis, stream));
+    } else {
+      std::vector<int> shifts = ruby_array_to_shape(shift_val);
+      std::vector<int> axes = ruby_array_to_shape(axis_val);
+      return wrap_array(mx::roll(a, shifts, axes, stream));
+    }
   }
-  
-  return wrap_array(result);
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
