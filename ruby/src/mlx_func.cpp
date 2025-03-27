@@ -27,6 +27,13 @@ static void gc_func_free(void* ptr) {
   delete wrapper;
 }
 
+// Structure for Ruby Data object type
+static const rb_data_type_t gc_func_type = {
+  "mlx_gc_func",
+  {gc_func_mark, gc_func_free, nullptr, nullptr},
+  nullptr, nullptr, RUBY_TYPED_FREE_IMMEDIATELY
+};
+
 // --- Additional methods to mirror Python interface ---
 
 // Return the __doc__ from the underlying function (if any)
@@ -86,13 +93,6 @@ static VALUE gc_func_method_missing(int argc, VALUE* argv, VALUE self) {
   // Otherwise call super
   return rb_call_super(argc, argv);
 }
-
-// Structure for Ruby Data object type
-static const rb_data_type_t gc_func_type = {
-  "mlx_gc_func",
-  {gc_func_mark, gc_func_free, nullptr, nullptr},
-  nullptr, nullptr, RUBY_TYPED_FREE_IMMEDIATELY
-};
 
 // Function to call the wrapped Ruby function
 static VALUE gc_func_call(int argc, VALUE* argv, VALUE self) {

@@ -21,7 +21,7 @@ static mx::StreamOrDevice parse_stream_or_device(VALUE v) {
     // Interpret a fixnum as a device index
     int device_id = NUM2INT(v);
     // e.g. create a device from the ID
-    return mx::StreamOrDevice(device_id);
+    return mx::Device(device_id == 0 ? mx::Device::cpu : mx::Device::gpu);
   }
   else if (RB_TYPE_P(v, T_FLOAT)) {
     // Arbitrary example: raise an error if it's a float
@@ -158,6 +158,41 @@ static void metal_kernel_free(void* ptr) {
   delete wrapper;
 }
 
+// Callback function for rb_hash_foreach that doesn't use lambda
+static int template_args_foreach_callback(VALUE key, VALUE val, VALUE arg) {
+  std::vector<std::pair<std::string, mx::fast::TemplateArg>>* template_args = 
+    reinterpret_cast<std::vector<std::pair<std::string, mx::fast::TemplateArg>>*>((void*)arg);
+  
+  // Key must be a string/symbol
+  std::string key_str;
+  if (RB_TYPE_P(key, T_STRING)) {
+    key_str = StringValueCStr(key);
+  } else if (RB_TYPE_P(key, T_SYMBOL)) {
+    key_str = rb_id2name(SYM2ID(key));
+  } else {
+    rb_raise(rb_eTypeError, "Template key must be string or symbol");
+  }
+  
+  // Value can be int or bool (float needs to be converted to int)
+  if (RB_TYPE_P(val, T_FIXNUM)) {
+    // Create int variant
+    int int_val = NUM2INT(val);
+    template_args->push_back(std::make_pair(key_str, static_cast<int>(int_val)));
+  } else if (RB_TYPE_P(val, T_FLOAT)) {
+    // For float, convert to int since TemplateArg doesn't support float
+    int int_val = (int)NUM2DBL(val);
+    template_args->push_back(std::make_pair(key_str, static_cast<int>(int_val)));
+  } else if (val == Qtrue || val == Qfalse) {
+    // Create bool variant
+    bool bool_val = (val == Qtrue);
+    template_args->push_back(std::make_pair(key_str, bool_val));
+  } else {
+    rb_raise(rb_eTypeError, "Template value must be int, float, or bool");
+  }
+  
+  return ST_CONTINUE;
+}
+
 // C callback function for Ruby proc
 static VALUE metal_kernel_callback(VALUE self, VALUE args) {
   VALUE data = rb_iv_get(self, "@metal_kernel_wrapper");
@@ -212,35 +247,7 @@ static VALUE metal_kernel_callback(VALUE self, VALUE args) {
   if (!NIL_P(template_args_val)) {
     Check_Type(template_args_val, T_HASH);
     // Iterate over hash
-    rb_hash_foreach(template_args_val, [](VALUE key, VALUE val, VALUE arg) {
-      std::vector<std::pair<std::string, mx::fast::TemplateArg>>* template_args = 
-        reinterpret_cast<std::vector<std::pair<std::string, mx::fast::TemplateArg>>*>(arg);
-      
-      // Key must be a string/symbol
-      std::string key_str;
-      if (RB_TYPE_P(key, T_STRING)) {
-        key_str = StringValueCStr(key);
-      } else if (RB_TYPE_P(key, T_SYMBOL)) {
-        key_str = rb_id2name(SYM2ID(key));
-      } else {
-        rb_raise(rb_eTypeError, "Template key must be string or symbol");
-      }
-      
-      // Value can be int, float, or bool
-      mx::fast::TemplateArg arg_val;
-      if (RB_TYPE_P(val, T_FIXNUM)) {
-        arg_val = NUM2INT(val);
-      } else if (RB_TYPE_P(val, T_FLOAT)) {
-        arg_val = NUM2DBL(val);
-      } else if (val == Qtrue || val == Qfalse) {
-        arg_val = (val == Qtrue);
-      } else {
-        rb_raise(rb_eTypeError, "Template value must be int, float, or bool");
-      }
-      
-      template_args->push_back(std::make_pair(key_str, arg_val));
-      return ST_CONTINUE;
-    }, reinterpret_cast<VALUE>(&template_args));
+    rb_hash_foreach(template_args_val, template_args_foreach_callback, (VALUE)&template_args);
   }
   
   // Init value (optional)
@@ -335,50 +342,46 @@ static VALUE fast_metal_kernel(VALUE self, VALUE name, VALUE input_names, VALUE 
 }
 
 static VALUE fast_scaled_dot_product_attention(int argc, VALUE* argv, VALUE self) {
-  // Python: scaled_dot_product_attention(
-  //     q, k, v, scale=None, mask=None, *, causal=False, 
-  //     dropout=None, dropout_p=0.0, stream=None)
-  // -> We need at least (q, k, v), optional scale, mask, causal, dropout_seed, dropout_p, stream.
-  // In Ruby, 3..9 arguments.
-  
-  if (argc < 3 || argc > 9) {
-    rb_raise(rb_eArgError,
-             "wrong number of arguments (given %d, expected 3..9). "
-             "Signature: scaled_dot_product_attention(q, k, v, scale=nil, mask=nil, "
-             "causal=false, dropout_seed=nil, dropout_p=0.0, stream=nil)",
-             argc);
-  }
-
-  mx::array& q = get_array(argv[0]);
-  mx::array& k = get_array(argv[1]);
-  mx::array& v = get_array(argv[2]);
-  
-  // Optional args
-  std::optional<float> scale_opt;
-  if (argc > 3 && !NIL_P(argv[3])) {
-    scale_opt = (float)NUM2DBL(argv[3]);
+  if (argc < 3 || argc > 8) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 3..8)", argc);
   }
   
-  std::optional<mx::array> mask_opt;
-  if (argc > 4 && !NIL_P(argv[4])) {
-    mask_opt = get_array(argv[4]);
+  VALUE q_val = argv[0];
+  VALUE k_val = argv[1];
+  VALUE v_val = argv[2];
+  VALUE scale_val = (argc > 3) ? argv[3] : Qnil;
+  VALUE mask_val = (argc > 4) ? argv[4] : Qnil;
+  VALUE causal_val = (argc > 5) ? argv[5] : Qnil;
+  VALUE mem_eff_val = (argc > 6) ? argv[6] : Qnil;
+  VALUE stream_val = (argc > 7) ? argv[7] : Qnil;
+  
+  mx::array& q = get_array(q_val);
+  mx::array& k = get_array(k_val);
+  mx::array& v = get_array(v_val);
+  
+  float scale = 1.0 / std::sqrt(q.shape()[-1]);
+  if (!NIL_P(scale_val)) {
+    scale = (float)NUM2DBL(scale_val);
   }
   
-  bool causal = (argc > 5) ? RTEST(argv[5]) : false;
-  
-  std::optional<int> dropout_seed;
-  if (argc > 6 && !NIL_P(argv[6])) {
-    dropout_seed = NUM2INT(argv[6]);
+  std::variant<std::monostate, std::string, mx::array> mask;
+  if (!NIL_P(mask_val)) {
+    if (rb_obj_is_kind_of(mask_val, rb_path2class("MLX::Core::Array"))) {
+      mask = get_array(mask_val);
+    } else if (mask_val == ID2SYM(rb_intern("causal"))) {
+      mask = std::string("causal");
+    }
   }
   
-  float dropout_p = (argc > 7) ? (float)NUM2DBL(argv[7]) : 0.0f;
+  std::optional<int> memory_efficient = std::nullopt;
+  if (!NIL_P(mem_eff_val)) {
+    memory_efficient = NUM2INT(mem_eff_val);
+  }
   
-  // Optional stream param
-  VALUE stream_val = (argc > 8) ? argv[8] : Qnil;
   mx::StreamOrDevice s = parse_stream_or_device(stream_val);
   
   mx::array result = mx::fast::scaled_dot_product_attention(
-      q, k, v, scale_opt, mask_opt, causal, dropout_seed, dropout_p, s);
+      q, k, v, scale, mask, memory_efficient, s);
   
   return wrap_array(result);
 }
@@ -455,27 +458,50 @@ static VALUE fast_layer_norm(int argc, VALUE* argv, VALUE self) {
 }
 
 static VALUE fast_rope(int argc, VALUE* argv, VALUE self) {
-  // Python: rope(x, dims, traditional=False, base=10000.0, dynamic=True, *, stream=None)
-  // -> So total 1..6 arguments in Ruby.
-  if (argc < 2 || argc > 6) {
-    rb_raise(rb_eArgError,
-             "wrong number of arguments (given %d, expected 2..6). "
-             "Signature: rope(x, dims, traditional=false, base=10000.0, dynamic=true, stream=nil)",
-             argc);
+  if (argc < 2 || argc > 7) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..7)", argc);
   }
-
-  mx::array& arr_x = get_array(argv[0]);
-  int64_t rope_dims = NUM2INT(argv[1]);
-  bool traditional = (argc > 2) ? RTEST(argv[2]) : false;
-  double base = (argc > 3) ? NUM2DBL(argv[3]) : 10000.0;
-  bool dynamic = (argc > 4) ? RTEST(argv[4]) : true;
   
-  // Optional 6th param: stream
-  VALUE stream_val = (argc > 5) ? argv[5] : Qnil;
+  VALUE x_val = argv[0];
+  VALUE dims_val = argv[1];
+  VALUE traditional_val = (argc > 2) ? argv[2] : Qfalse;
+  VALUE base_val = (argc > 3) ? argv[3] : Qnil;
+  VALUE scale_val = (argc > 4) ? argv[4] : Qnil;
+  VALUE offset_val = (argc > 5) ? argv[5] : Qnil;
+  VALUE stream_val = (argc > 6) ? argv[6] : Qnil;
+  
+  mx::array& arr_x = get_array(x_val);
+  int rope_dims = NUM2INT(dims_val);
+  bool traditional = RTEST(traditional_val);
+  
+  std::optional<float> base = std::nullopt;
+  if (!NIL_P(base_val)) {
+    base = (float)NUM2DBL(base_val);
+  }
+  
+  float scale = 1.0f;
+  if (!NIL_P(scale_val)) {
+    scale = (float)NUM2DBL(scale_val);
+  }
+  
   mx::StreamOrDevice s = parse_stream_or_device(stream_val);
-
-  mx::array result = mx::fast::rope(arr_x, rope_dims, traditional, base, dynamic, s);
-  return wrap_array(result);
+  
+  // Call rope with the correct parameters based on offset type
+  if (NIL_P(offset_val)) {
+    // Use the version with integer offset 0
+    mx::array result = mx::fast::rope(arr_x, rope_dims, traditional, base, scale, 0);
+    return wrap_array(result);
+  } else if (rb_obj_is_kind_of(offset_val, rb_path2class("MLX::Core::Array"))) {
+    // Use the version with array offset
+    mx::array& offset_arr = get_array(offset_val);
+    mx::array result = mx::fast::rope(arr_x, rope_dims, traditional, base, scale, offset_arr);
+    return wrap_array(result);
+  } else {
+    // Use the version with integer offset
+    int offset = NUM2INT(offset_val);
+    mx::array result = mx::fast::rope(arr_x, rope_dims, traditional, base, scale, offset);
+    return wrap_array(result);
+  }
 }
 
 // Remove rope_inplace since it doesn't exist in mx::fast

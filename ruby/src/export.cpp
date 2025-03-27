@@ -358,6 +358,62 @@ static VALUE rb_export_function(int argc, VALUE *argv, VALUE self)
  * In Ruby, we'll return a Proc or a custom object that can be called the same way.
  */
 
+// Static function for the imported function proc
+static VALUE imported_function_proc_handler(int argc, VALUE* argv, VALUE self) {
+  // Retrieve the ImportedFunction pointer from the captured data
+  // We stored it as a hidden pointer in the Proc's environment
+  mx::ImportedFunction* captured_fn;
+  Data_Get_Struct(rb_iv_get(self, "@mlx_imported_fn"), mx::ImportedFunction, captured_fn);
+
+  // Next, read the actual call arguments from Ruby
+  if (argc < 1) {
+    // no arguments: call with empty
+    std::vector<mx::array> pos_args;
+    std::map<std::string, mx::array> kwargs;
+    auto out = (*captured_fn)(pos_args, kwargs);
+    // Return a Ruby array
+    VALUE ret_ary = rb_ary_new();
+    for (auto &x : out) {
+      rb_ary_push(ret_ary, wrap_array(x));
+    }
+    return ret_ary;
+  }
+
+  // If last argument is a Hash, treat it as kwargs
+  std::map<std::string, mx::array> kwargs;
+  if (TYPE(argv[argc-1]) == T_HASH) {
+    kwargs = ruby_hash_to_std_map(argv[argc-1]);
+    argc--;
+  }
+  std::vector<mx::array> pos_args;
+  for (int i = 0; i < argc; i++) {
+    // If an argument is itself an Array or hash, you might replicate Python's logic.
+    // For brevity, we treat each one as a single MLX::Core::Array or a T_ARRAY of them.
+    if (rb_obj_is_kind_of(argv[i], rb_path2class("MLX::Core::Array"))) {
+      pos_args.push_back(copy_array(get_array(argv[i])));
+    } else if (RB_TYPE_P(argv[i], T_ARRAY)) {
+      // expand
+      auto sub = ruby_array_to_vector(argv[i]);
+      pos_args.insert(pos_args.end(), sub.begin(), sub.end());
+    } else {
+      rb_raise(rb_eArgError, "[import_function callable] unsupported argument type");
+    }
+  }
+
+  auto out = (*captured_fn)(pos_args, kwargs);
+  VALUE ret_ary = rb_ary_new();
+  for (auto &x : out) {
+    rb_ary_push(ret_ary, wrap_array(x));
+  }
+  return ret_ary; // always return a tuple-of-arrays in Python => an Array in Ruby
+}
+
+// Wrapper function with correct rb_block_call_func_t signature
+static VALUE imported_function_wrapper(VALUE yielded_arg, VALUE callback_arg, int argc, const VALUE* argv, VALUE blockarg) {
+  // Adjust to match the existing handler signature
+  return imported_function_proc_handler(argc, const_cast<VALUE*>(argv), callback_arg);
+}
+
 static VALUE rb_import_function(VALUE self, VALUE file_val)
 {
   if (TYPE(file_val) != T_STRING) {
@@ -368,71 +424,14 @@ static VALUE rb_import_function(VALUE self, VALUE file_val)
   // Underlying import
   auto fn = mx::import_function(file);
 
-  // Wrap it in a Ruby callable (Proc). We capture `fn` by value here.
-  VALUE proc = rb_proc_new(
-    [](ANYARGS) -> VALUE {
-      // This is the actual code called when the Ruby Proc is invoked.
-      // The first argument is yield data "self", second is the proc itself, etc.
-      // We'll retrieve our captured mx::function from the closure data.
-      VALUE proc_self = rb_block_proc(); // The proc itself
-      // Retrieve the cFunction pointer from the captured data
-      // We stored it as a hidden pointer in the Proc's env, so we do:
-      mx::Function* captured_fn;
-      Data_Get_Struct(rb_iv_get(proc_self, "@mlx_imported_fn"), mx::Function, captured_fn);
-
-      // Next, read the actual call arguments from Ruby. In Python, we accept
-      // either a list of positional arrays, or a single array of arrays, etc.
-      // For simplicity, gather them all as positional arrays, plus an optional last-hash for kwargs.
-      int argc = rb_scan_args(__argc, __argv, "*", NULL);
-      if (argc < 1) {
-        // no arguments: call with empty
-        std::vector<mx::array> pos_args;
-        std::map<std::string, mx::array> kwargs;
-        auto out = (*captured_fn)(pos_args, kwargs);
-        // Return a Ruby array
-        VALUE ret_ary = rb_ary_new();
-        for (auto &x : out) {
-          rb_ary_push(ret_ary, wrap_array(x));
-        }
-        return ret_ary;
-      }
-
-      // If last argument is a Hash, treat it as kwargs
-      std::map<std::string, mx::array> kwargs;
-      if (TYPE(__argv[argc-1]) == T_HASH) {
-        kwargs = ruby_hash_to_std_map(__argv[argc-1]);
-        argc--;
-      }
-      std::vector<mx::array> pos_args;
-      for (int i = 0; i < argc; i++) {
-        // If an argument is itself an Array or hash, you might replicate Python's logic.
-        // For brevity, we treat each one as a single MLX::Core::Array or a T_ARRAY of them.
-        if (rb_obj_is_kind_of(__argv[i], rb_path2class("MLX::Core::Array"))) {
-          pos_args.push_back(copy_array(get_array(__argv[i])));
-        } else if (RB_TYPE_P(__argv[i], T_ARRAY)) {
-          // expand
-          auto sub = ruby_array_to_vector(__argv[i]);
-          pos_args.insert(pos_args.end(), sub.begin(), sub.end());
-        } else {
-          rb_raise(rb_eArgError, "[import_function callable] unsupported argument type");
-        }
-      }
-
-      auto out = (*captured_fn)(pos_args, kwargs);
-      VALUE ret_ary = rb_ary_new();
-      for (auto &x : out) {
-        rb_ary_push(ret_ary, wrap_array(x));
-      }
-      return ret_ary; // always return a tuple-of-arrays in Python => an Array in Ruby
-    },
-    0
-  );
+  // Create a Proc with our handler function (using the wrapper with correct signature)
+  VALUE proc = rb_proc_new(imported_function_wrapper, Qnil);
 
   // We must store fn in an allocated structure so it doesn't vanish. We wrap it in a Ruby object:
-  mx::Function* fn_ptr = new mx::Function(fn);
+  mx::ImportedFunction* fn_ptr = new mx::ImportedFunction(fn);
   // attach it to the proc
   rb_iv_set(proc, "@mlx_imported_fn", Data_Wrap_Struct(rb_cObject, NULL, [](void *p) {
-    delete reinterpret_cast<mx::Function*>(p);
+    delete reinterpret_cast<mx::ImportedFunction*>(p);
   }, fn_ptr));
 
   return proc;
@@ -445,7 +444,8 @@ static VALUE rb_import_function(VALUE self, VALUE file_val)
 
 // This struct will store an mx::FunctionExporter plus the original Ruby fun object (to keep GC references).
 typedef struct {
-  mx::FunctionExporter exporter;
+  // Use a pointer to mx::FunctionExporter since we can't default construct it
+  std::unique_ptr<mx::FunctionExporter> exporter;
   VALUE ruby_fun; // so GC doesn't free it
 } RBFunctionExporter;
 
@@ -454,7 +454,9 @@ static void rb_function_exporter_free(void *ptr) {
 }
 
 static VALUE rb_function_exporter_alloc(VALUE klass) {
+  // Just allocate the struct without initializing exporter
   RBFunctionExporter* data = new RBFunctionExporter();
+  data->exporter = nullptr; // Will be initialized in initialize
   data->ruby_fun = Qnil;
   return Data_Wrap_Struct(klass, NULL, rb_function_exporter_free, data);
 }
@@ -519,14 +521,17 @@ static VALUE rb_function_exporter_initialize(int argc, VALUE *argv, VALUE self) 
     return outputs;
   };
 
-  data->exporter = mx::exporter(file, wrapper, shapeless);
+  // Create the exporter using the constructor directly
+  data->exporter = std::make_unique<mx::FunctionExporter>(mx::exporter(file, wrapper, shapeless));
   return self;
 }
 
 static VALUE rb_function_exporter_close(VALUE self) {
   RBFunctionExporter* data;
   Data_Get_Struct(self, RBFunctionExporter, data);
-  data->exporter.close();
+  if (data->exporter) {
+    data->exporter->close();
+  }
   return Qnil;
 }
 
@@ -535,6 +540,10 @@ static VALUE rb_function_exporter_call(int argc, VALUE *argv, VALUE self) {
   // We'll parse them quickly again. Then pass to exporter(args, kwargs).
   RBFunctionExporter* data;
   Data_Get_Struct(self, RBFunctionExporter, data);
+
+  if (!data->exporter) {
+    rb_raise(rb_eRuntimeError, "FunctionExporter not initialized or already closed");
+  }
 
   // parse as we did in export_function
   std::vector<mx::array> pos_args;
@@ -556,7 +565,7 @@ static VALUE rb_function_exporter_call(int argc, VALUE *argv, VALUE self) {
   }
 
   // Now call the underlying exporter
-  data->exporter(pos_args, kwargs_map);
+  (*data->exporter)(pos_args, kwargs_map);
   return Qnil;
 }
 

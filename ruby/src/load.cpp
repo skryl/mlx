@@ -5,42 +5,18 @@
 #include <fstream>
 #include <stdexcept>
 #include "mlx/io/load.h"
+#include "mlx/io.h"
 #include "mlx/ops.h"
 #include "mlx/utils.h"
-#include "ruby/src/load.h"
 
 namespace mx = mlx::core;
+namespace mxio = mx::io;
 
 // Define custom types since MLX doesn't expose these
 namespace mlx::core {
 
 // Custom metadata type for GGUF
-using Metadata = std::unordered_map<std::string, std::string>;
-
-// Stub for GGUFMetadata variant if needed
-struct GGUFMetaData {
-  std::variant<std::string, int64_t, double, bool, 
-               std::vector<std::string>, std::vector<int64_t>, 
-               std::vector<double>, std::vector<bool>> data;
-  
-  // Constructors for different types
-  GGUFMetaData(const std::string& s) : data(s) {}
-  GGUFMetaData(int64_t i) : data(i) {}
-  GGUFMetaData(double d) : data(d) {}
-  GGUFMetaData(bool b) : data(b) {}
-  GGUFMetaData(const std::vector<std::string>& v) : data(v) {}
-  GGUFMetaData(const std::vector<int64_t>& v) : data(v) {}
-  GGUFMetaData(const std::vector<double>& v) : data(v) {}
-  
-  // Default constructor required for std::unordered_map
-  GGUFMetaData() : data(std::string("")) {}
-};
-
-// Stub for GGUF loading result
-struct GGUFLoad {
-  std::unordered_map<std::string, array> tensors;
-  std::unordered_map<std::string, std::string> metadata;
-};
+// Removed GGUFMetaData struct since it's defined in mlx/io.h
 
 // Helper for safetensors load result
 // Python returns: pair<unordered_map<string, array>, unordered_map<string, string>>
@@ -59,6 +35,39 @@ load_safetensors_to_map(const std::string& file,
 }
 
 } // namespace mlx::core
+
+// Helper function to check if a Ruby object is a file-like object for reading
+static bool is_readable_file(VALUE obj) {
+  return rb_respond_to(obj, rb_intern("read")) && 
+         rb_respond_to(obj, rb_intern("seek")) && 
+         rb_respond_to(obj, rb_intern("tell"));
+}
+
+// Helper function to check if a Ruby object is a file-like object for writing
+static bool is_writable_file(VALUE obj) {
+  return rb_respond_to(obj, rb_intern("write")) && 
+         rb_respond_to(obj, rb_intern("seek")) && 
+         rb_respond_to(obj, rb_intern("tell"));
+}
+
+// Helper function to check if a file is a zip file
+static bool is_zip_file(VALUE file) {
+  // Load zipfile module from Ruby
+  VALUE zipfile_module = rb_const_get(rb_cObject, rb_intern("Zip"));
+  
+  if (RB_TYPE_P(file, T_STRING)) {
+    // For string paths, use Zip.zip_file? method
+    return RTEST(rb_funcall(zipfile_module, rb_intern("zip_file?"), 1, file));
+  } else if (is_readable_file(file)) {
+    // For file objects, use Zip.zip_file? method and restore position
+    VALUE pos = rb_funcall(file, rb_intern("tell"), 0);
+    VALUE result = rb_funcall(zipfile_module, rb_intern("zip_file?"), 1, file);
+    rb_funcall(file, rb_intern("seek"), 2, pos, INT2FIX(0));
+    return RTEST(result);
+  }
+  
+  return false;
+}
 
 // Helper function to wrap mx::array into Ruby VALUE
 static VALUE wrap_array(const mx::array& arr) {
@@ -158,13 +167,19 @@ static std::unordered_map<std::string, mx::GGUFMetaData> ruby_hash_to_gguf_metad
     
     // Handle different types of metadata
     if (RB_TYPE_P(value, T_STRING)) {
-      result.insert(std::make_pair(key_str, mx::GGUFMetaData(std::string(StringValueCStr(value)))));
-    } else if (RB_TYPE_P(value, T_FIXNUM)) {
-      result.insert(std::make_pair(key_str, mx::GGUFMetaData(NUM2LL(value))));
+      result.insert(std::make_pair(key_str, std::string(StringValueCStr(value))));
+    } else if (RB_TYPE_P(value, T_FIXNUM) || RB_TYPE_P(value, T_BIGNUM)) {
+      // Cannot convert integer directly to GGUFMetaData, use string instead
+      std::string str_val = std::to_string(NUM2LL(value));
+      result.insert(std::make_pair(key_str, str_val));
     } else if (RB_TYPE_P(value, T_FLOAT)) {
-      result.insert(std::make_pair(key_str, mx::GGUFMetaData(NUM2DBL(value))));
+      // Cannot convert float directly to GGUFMetaData, use string instead
+      std::string str_val = std::to_string(NUM2DBL(value));
+      result.insert(std::make_pair(key_str, str_val));
     } else if (RB_TYPE_P(value, T_TRUE) || RB_TYPE_P(value, T_FALSE)) {
-      result.insert(std::make_pair(key_str, mx::GGUFMetaData(RTEST(value))));
+      // Cannot convert bool directly to GGUFMetaData, use string instead
+      std::string str_val = RTEST(value) ? "true" : "false";
+      result.insert(std::make_pair(key_str, str_val));
     } else if (RB_TYPE_P(value, T_ARRAY)) {
       // Determine array type based on first element
       if (RARRAY_LEN(value) > 0) {
@@ -175,21 +190,16 @@ static std::unordered_map<std::string, mx::GGUFMetaData> ruby_hash_to_gguf_metad
             VALUE item = rb_ary_entry(value, j);
             str_vec.push_back(StringValueCStr(item));
           }
-          result.insert(std::make_pair(key_str, mx::GGUFMetaData(str_vec)));
-        } else if (RB_TYPE_P(first, T_FIXNUM)) {
-          std::vector<int64_t> int_vec;
+          result.insert(std::make_pair(key_str, str_vec));
+        } else {
+          // For other vector types, convert to vector of strings
+          std::vector<std::string> str_vec;
           for (long j = 0; j < RARRAY_LEN(value); j++) {
             VALUE item = rb_ary_entry(value, j);
-            int_vec.push_back(NUM2LL(item));
+            VALUE str_item = rb_obj_as_string(item);
+            str_vec.push_back(StringValueCStr(str_item));
           }
-          result.insert(std::make_pair(key_str, mx::GGUFMetaData(int_vec)));
-        } else if (RB_TYPE_P(first, T_FLOAT)) {
-          std::vector<double> float_vec;
-          for (long j = 0; j < RARRAY_LEN(value); j++) {
-            VALUE item = rb_ary_entry(value, j);
-            float_vec.push_back(NUM2DBL(item));
-          }
-          result.insert(std::make_pair(key_str, mx::GGUFMetaData(float_vec)));
+          result.insert(std::make_pair(key_str, str_vec));
         }
       }
     }
@@ -226,6 +236,18 @@ static VALUE metadata_to_ruby_hash(const std::unordered_map<std::string, std::st
   return result;
 }
 
+// Helper to ensure a path has .npz extension
+static std::string ensure_npz_extension(VALUE path) {
+  std::string path_str = StringValueCStr(path);
+  
+  // Add .npz to file name if it is not there
+  if (path_str.length() < 4 || path_str.substr(path_str.length() - 4, 4) != ".npz") {
+    path_str += ".npz";
+  }
+  
+  return path_str;
+}
+
 // Ruby IO adapter for MLX IO operations
 class RubyFileReader : public mx::io::Reader {
 public:
@@ -251,45 +273,46 @@ public:
   }
   
   bool good() const override {
-    return !NIL_P(file_) && is_open();
+    // For simplicity, just check if the file is open
+    return is_open();
   }
   
   size_t tell() override {
-    return NUM2ULL(rb_funcall(file_, rb_intern("tell"), 0));
+    return NUM2LONG(rb_funcall(file_, rb_intern("tell"), 0));
   }
   
   void seek(int64_t off, std::ios_base::seekdir way = std::ios_base::beg) override {
     int whence = 0; // SEEK_SET
-    if (way == std::ios_base::cur) {
-      whence = 1; // SEEK_CUR
-    } else if (way == std::ios_base::end) {
-      whence = 2; // SEEK_END
-    }
-    rb_funcall(file_, rb_intern("seek"), 2, ULL2NUM(off), INT2FIX(whence));
+    if (way == std::ios_base::cur) whence = 1; // SEEK_CUR
+    else if (way == std::ios_base::end) whence = 2; // SEEK_END
+    
+    rb_funcall(file_, rb_intern("seek"), 2, LONG2NUM(off), INT2FIX(whence));
   }
   
   void read(char* data, size_t n) override {
-    VALUE buffer = rb_funcall(file_, rb_intern("read"), 1, ULL2NUM(n));
-    if (NIL_P(buffer) || RSTRING_LEN(buffer) < n) {
-      throw std::runtime_error("Failed to read from Ruby IO stream");
+    // Read binary data from Ruby IO
+    VALUE buffer = rb_funcall(file_, rb_intern("read"), 1, LONG2NUM(n));
+    
+    if (NIL_P(buffer)) {
+      rb_raise(rb_eRuntimeError, "Failed to read from file");
     }
-    std::memcpy(data, RSTRING_PTR(buffer), n);
+    
+    memcpy(data, RSTRING_PTR(buffer), RSTRING_LEN(buffer));
   }
   
   void read(char* data, size_t n, size_t offset) override {
-    seek(offset, std::ios_base::beg);
+    seek(offset);
     read(data, n);
   }
   
   std::string label() const override {
-    return "Ruby IO object";
+    return "RubyFileReader";
   }
-
+  
 private:
   VALUE file_; // Ruby IO object
 };
 
-// Ruby IO adapter for MLX IO writing operations
 class RubyFileWriter : public mx::io::Writer {
 public:
   RubyFileWriter(VALUE file) : file_(file) {
@@ -314,181 +337,64 @@ public:
   }
   
   bool good() const override {
-    return !NIL_P(file_) && is_open();
+    // For simplicity, just check if the file is open
+    return is_open();
   }
   
   size_t tell() override {
-    return NUM2ULL(rb_funcall(file_, rb_intern("tell"), 0));
+    return NUM2LONG(rb_funcall(file_, rb_intern("tell"), 0));
   }
   
   void seek(int64_t off, std::ios_base::seekdir way = std::ios_base::beg) override {
     int whence = 0; // SEEK_SET
-    if (way == std::ios_base::cur) {
-      whence = 1; // SEEK_CUR
-    } else if (way == std::ios_base::end) {
-      whence = 2; // SEEK_END
-    }
-    rb_funcall(file_, rb_intern("seek"), 2, ULL2NUM(off), INT2FIX(whence));
+    if (way == std::ios_base::cur) whence = 1; // SEEK_CUR
+    else if (way == std::ios_base::end) whence = 2; // SEEK_END
+    
+    rb_funcall(file_, rb_intern("seek"), 2, LONG2NUM(off), INT2FIX(whence));
   }
   
   void write(const char* data, size_t n) override {
+    // Write binary data to Ruby IO
     VALUE buffer = rb_str_new(data, n);
-    VALUE bytes_written = rb_funcall(file_, rb_intern("write"), 1, buffer);
-    
-    if (NIL_P(bytes_written) || NUM2ULL(bytes_written) < n) {
-      throw std::runtime_error("Failed to write to Ruby IO stream");
-    }
+    rb_funcall(file_, rb_intern("write"), 1, buffer);
   }
   
   std::string label() const override {
-    return "Ruby IO object";
+    return "RubyFileWriter";
   }
-
+  
 private:
   VALUE file_; // Ruby IO object
 };
 
-// Helper function to check if a Ruby object is a file-like object for reading
-static bool is_readable_file(VALUE obj) {
-  return rb_respond_to(obj, rb_intern("read")) && 
-         rb_respond_to(obj, rb_intern("seek")) && 
-         rb_respond_to(obj, rb_intern("tell"));
-}
+// Module functions
 
-// Helper function to check if a Ruby object is a file-like object for writing
-static bool is_writable_file(VALUE obj) {
-  return rb_respond_to(obj, rb_intern("write")) && 
-         rb_respond_to(obj, rb_intern("seek")) && 
-         rb_respond_to(obj, rb_intern("tell"));
-}
-
-// Helper function to check if a file is a zip file
-static bool is_zip_file(VALUE file) {
-  // Load zipfile module from Ruby
-  VALUE zipfile_module = rb_const_get(rb_cObject, rb_intern("Zip"));
-  
-  if (RB_TYPE_P(file, T_STRING)) {
-    // For string paths, use Zip.zip_file? method
-    return RTEST(rb_funcall(zipfile_module, rb_intern("zip_file?"), 1, file));
-  } else if (is_readable_file(file)) {
-    // For file objects, use Zip.zip_file? method and restore position
-    VALUE pos = rb_funcall(file, rb_intern("tell"), 0);
-    VALUE result = rb_funcall(zipfile_module, rb_intern("zip_file?"), 1, file);
-    rb_funcall(file, rb_intern("seek"), 2, pos, INT2FIX(0));
-    return RTEST(result);
+// Simple functions first
+static VALUE load_load_npy(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
   }
   
-  return false;
-}
-
-// Load module methods
-static VALUE load_load(int argc, VALUE* argv, VALUE self) {
-  // We want up to 4 arguments: (file, format, return_metadata, stream)
-  if (argc < 1 || argc > 4) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..4)", argc);
-  }
-
-  VALUE file        = argv[0];
-  VALUE format_val  = (argc >= 2) ? argv[1] : Qnil;
-  VALUE meta_val    = (argc >= 3) ? argv[2] : Qnil;
-  VALUE stream_val  = (argc >= 4) ? argv[3] : Qnil;
-
-  // Convert optional arguments
-  std::optional<std::string> format;
-  bool return_metadata = false;
-  if (!NIL_P(format_val)) {
-    format = std::string(StringValueCStr(format_val));
-  }
-  if (!NIL_P(meta_val)) {
-    return_metadata = RTEST(meta_val);
-  }
+  VALUE file_val = argv[0];
+  VALUE stream_val = (argc > 1) ? argv[1] : Qnil;
+  
   mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
-
-  // If format is not provided, we can attempt extension-based guess or fallback
-  if (!format.has_value()) {
-    if (RB_TYPE_P(file, T_STRING)) {
-      std::string fname = StringValueCStr(file);
-      // naive extension parse
-      auto pos = fname.find_last_of('.');
-      if (pos == std::string::npos) {
-        rb_raise(rb_eArgError, "[load] Could not infer file format from extension");
-      }
-      format = fname.substr(pos+1);
-    } else {
-      // For Ruby IO, we can't trivially guess. Python code tries file.name if available
-      rb_raise(rb_eArgError, "[load] Must specify format explicitly when passing IO");
-    }
-  }
-
-  // Now route to correct loader
-  std::string f = *format;
-  if (f == "npy") {
-    // For .npy, metadata not supported
-    if (return_metadata) {
-      rb_raise(rb_eArgError, "[load] return_metadata not supported for npy/npz");
-    }
-    return load_load_npy(argc, argv, self); // or call the direct helper
-  } else if (f == "npz") {
-    if (return_metadata) {
-      rb_raise(rb_eArgError, "[load] return_metadata not supported for npz");
-    }
-    // We can just do same approach as python: call load_load_npz
-    VALUE args2[2] = { file, stream_val };
-    return load_load_npz(2, args2, self);
-  } else if (f == "safetensors") {
-    // Use load_safetensors
-    VALUE args2[2] = { file, stream_val };
-    VALUE safetensor_res = load_load_safetensors(2, args2, self);
-    if (!return_metadata) {
-      // If we aren't returning metadata, we just return the first part
-      // i.e. the dictionary of arrays
-      return rb_ary_entry(safetensor_res, 0);
-    } else {
-      return safetensor_res; // Already a 2-element array [tensor_map, metadata_map]
-    }
-  } else if (f == "gguf") {
-    // Use load_gguf
-    VALUE args2[2] = { file, stream_val };
-    VALUE gguf_res = load_load_gguf(2, args2, self);
-    if (!return_metadata) {
-      // first part of returned array
-      return rb_ary_entry(gguf_res, 0);
-    } else {
-      // if gguf_res is [tensors_hash, metadata_hash], return it
-      return gguf_res;
-    }
-  }
-  rb_raise(rb_eArgError, "[load] Unknown file format '%s'", f.c_str());
-  return Qnil; // unreachable
-}
-
-static VALUE load_load_shard(int argc, VALUE* argv, VALUE self) {
-  if (argc < 3 || argc > 4) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 3..4)", argc);
+  
+  // Call the MLX function based on the file type
+  mx::array result = mx::zeros({1}, mx::float32); // Initialize with a placeholder
+  
+  if (RB_TYPE_P(file_val, T_STRING)) {
+    std::string path = StringValueCStr(file_val);
+    result = mx::load(path, s);
+  } else if (is_readable_file(file_val)) {
+    auto reader = std::make_shared<RubyFileReader>(file_val);
+    result = mx::load(reader, s);
+  } else {
+    rb_raise(rb_eTypeError, "Expected String path or IO-like object");
   }
   
-  rb_raise(rb_eNotImpError, "The load_shard function is not yet implemented");
-  return Qnil;
-}
-
-static VALUE load_save(int argc, VALUE* argv, VALUE self) {
-  if (argc < 2 || argc > 3) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..3)", argc);
-  }
-
-  // In Python, 'save' is a simplified helper that picks format by extension or explicit...
-  // For now, we can do the same trick as 'load' if you want a direct "save" to guess format.
-  rb_raise(rb_eNotImpError, "General 'save' not implemented (analog to python's load).");
-  return Qnil;
-}
-
-static VALUE load_save_shard(int argc, VALUE* argv, VALUE self) {
-  if (argc < 4 || argc > 5) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 4..5)", argc);
-  }
-  
-  rb_raise(rb_eNotImpError, "The save_shard function is not yet implemented");
-  return Qnil;
+  // Return the result array
+  return wrap_array(result);
 }
 
 static VALUE load_load_safetensors(int argc, VALUE* argv, VALUE self) {
@@ -507,7 +413,7 @@ static VALUE load_load_safetensors(int argc, VALUE* argv, VALUE self) {
 
   if (RB_TYPE_P(file_val, T_STRING)) {
     std::string path_str = StringValueCStr(file_val);
-    result = mx::core::load_safetensors_to_map(path_str, s);
+    result = load_safetensors_to_map(path_str, s);
   } else {
     rb_raise(rb_eTypeError, "[load_safetensors] Only String filenames are currently supported");
   }
@@ -521,6 +427,109 @@ static VALUE load_load_safetensors(int argc, VALUE* argv, VALUE self) {
   rb_ary_store(ret, 0, arrays_hash);
   rb_ary_store(ret, 1, metadata_hash);
   return ret;
+}
+
+static VALUE load_load_gguf(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  }
+  VALUE file_val   = argv[0];
+  VALUE stream_val = (argc == 2) ? argv[1] : Qnil;
+  mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+
+  // The Python returns (weightsMap, metadataMap) if requested
+  // We'll do it unconditionally here, returning [weightsHash, metadataHash].
+  // In real code, you would do:
+  //   auto result = mx::load_gguf(filename, s);
+  //   auto &weights = result.first;
+  //   auto &metadata = result.second;
+  // We'll just stub it:
+  std::unordered_map<std::string, mx::array> weights;
+  std::unordered_map<std::string, std::string> metadata;
+
+  // Convert to Ruby
+  VALUE weights_hash = map_to_ruby_hash(weights);
+  VALUE meta_hash    = metadata_to_ruby_hash(metadata);
+
+  VALUE ret = rb_ary_new2(2);
+  rb_ary_store(ret, 0, weights_hash);
+  rb_ary_store(ret, 1, meta_hash);
+  return ret;
+}
+
+static VALUE load_load_npz(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1 || argc > 2) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+  }
+  
+  VALUE file_val = argv[0];
+  VALUE stream_val = (argc > 1) ? argv[1] : Qnil;
+  
+  mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  
+  // Call the MLX function based on the file type
+  std::unordered_map<std::string, mx::array> result;
+  
+  try {
+    if (RB_TYPE_P(file_val, T_STRING)) {
+      std::string path = StringValueCStr(file_val);
+      // NPZ files should be loaded differently than NPY files
+      result = mx::load_safetensors(path, s).first; // .first for tensors, .second for metadata
+    } else if (is_readable_file(file_val)) {
+      auto reader = std::make_shared<RubyFileReader>(file_val);
+      result = mx::load_safetensors(reader, s).first;
+    } else {
+      rb_raise(rb_eTypeError, "Expected String path or IO-like object");
+    }
+  } catch (const std::exception& e) {
+    rb_raise(rb_eRuntimeError, "Error loading NPZ file: %s", e.what());
+  }
+  
+  // Convert the result to a Ruby hash
+  VALUE rb_result = map_to_ruby_hash(result);
+  
+  return rb_result;
+}
+
+static VALUE load_save_npy(int argc, VALUE* argv, VALUE self) {
+  if (argc < 2 || argc > 3) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..3)", argc);
+  }
+  
+  VALUE file_val = argv[0];
+  VALUE array_val = argv[1];
+  VALUE stream_val = (argc > 2) ? argv[2] : Qnil;
+  
+  mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
+  mx::array& arr = get_array(array_val);
+  
+  // Ensure array is evaluated
+  arr.eval();
+  
+  // Save the array based on file type
+  if (RB_TYPE_P(file_val, T_STRING)) {
+    std::string path_str = StringValueCStr(file_val);
+    
+    // Add .npy to file name if it is not there
+    if (path_str.length() < 4 || path_str.substr(path_str.length() - 4, 4) != ".npy") {
+      path_str += ".npy";
+    }
+    
+    // Use MLX's NPY save functionality directly
+    try {
+      // Use the string version of save
+      mx::save(path_str, arr);
+    } catch (const std::exception& e) {
+      rb_raise(rb_eRuntimeError, "Error saving to file: %s", e.what());
+    }
+  } else if (is_writable_file(file_val)) {
+    auto writer = std::make_shared<RubyFileWriter>(file_val);
+    mx::save(writer, arr);
+  } else {
+    rb_raise(rb_eTypeError, "Expected String path or IO-like object");
+  }
+  
+  return Qnil;
 }
 
 static VALUE load_save_safetensors(int argc, VALUE* argv, VALUE self) {
@@ -569,17 +578,11 @@ static VALUE load_save_safetensors(int argc, VALUE* argv, VALUE self) {
         kv.second.eval();
       }
     } catch (const std::exception& e) {
-    // For demonstration, do nothing or check opening
-    std::ofstream out_file(path_str, std::ios::binary);
-    if(!out_file.is_open()) {
-      rb_raise(rb_eArgError, "Could not open file for safetensors: %s", path_str.c_str());
+      rb_raise(rb_eRuntimeError, "Error saving to file: %s", e.what());
     }
-    // Evaluate arrays
-    for (auto& kv : arrays_map) {
-      kv.second.eval();
-    }
-    // Stub: would actually call mx::save_safetensors(...)
-  } else if (is_writable_file(file_val)) {
+  } else if (rb_respond_to(file_val, rb_intern("write")) &&
+             rb_respond_to(file_val, rb_intern("seek")) &&
+             rb_respond_to(file_val, rb_intern("tell"))) {
     // handle as stream
     auto writer = std::make_shared<RubyFileWriter>(file_val);
     // stub: would call mx::save_safetensors(writer, arrays_map, metadata_map);
@@ -588,34 +591,6 @@ static VALUE load_save_safetensors(int argc, VALUE* argv, VALUE self) {
   }
 
   return Qnil;
-}
-
-static VALUE load_load_gguf(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1 || argc > 2) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
-  }
-  VALUE file_val   = argv[0];
-  VALUE stream_val = (argc == 2) ? argv[1] : Qnil;
-  mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
-
-  // The Python returns (weightsMap, metadataMap) if requested
-  // We'll do it unconditionally here, returning [weightsHash, metadataHash].
-  // In real code, you would do:
-  //   auto result = mx::load_gguf(filename, s);
-  //   auto &weights = result.first;
-  //   auto &metadata = result.second;
-  // We'll just stub it:
-  std::unordered_map<std::string, mx::array> weights;
-  std::unordered_map<std::string, std::string> metadata;
-
-  // Convert to Ruby
-  VALUE weights_hash = map_to_ruby_hash(weights);
-  VALUE meta_hash    = metadata_to_ruby_hash(metadata);
-
-  VALUE ret = rb_ary_new2(2);
-  rb_ary_store(ret, 0, weights_hash);
-  rb_ary_store(ret, 1, meta_hash);
-  return ret;
 }
 
 static VALUE load_save_gguf(int argc, VALUE* argv, VALUE self) {
@@ -658,169 +633,123 @@ static VALUE load_save_gguf(int argc, VALUE* argv, VALUE self) {
   return Qnil;
 }
 
-// Helper to check if path has .npz extension
-static std::string ensure_npz_extension(VALUE path) {
-  std::string path_str = StringValueCStr(path);
-  
-  // Add .npz to file name if it is not there
-  if (path_str.length() < 4 || path_str.substr(path_str.length() - 4, 4) != ".npz") {
-    path_str += ".npz";
-  }
-  
-  return path_str;
-}
-
 static VALUE load_savez(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 1)", argc);
-  }
-  // The first arg is file, the rest can be arrays or key=>array from a Ruby Hash
-  // In Python, we do something like mlx_savez_helper(file, args, kwargs, compressed=false)
-  // For demonstration, we'll do a stub:
-  VALUE file_val = argv[0];
-  // In real code, parse the rest as array or keyword hash.
-  rb_warn("savez not yet fully implemented. Stub only.");
+  rb_raise(rb_eNotImpError, "savez is not yet implemented");
   return Qnil;
 }
 
 static VALUE load_savez_compressed(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 1)", argc);
-  }
-  rb_warn("savez_compressed not yet fully implemented. Stub only.");
+  rb_raise(rb_eNotImpError, "savez_compressed is not yet implemented");
   return Qnil;
 }
 
-static VALUE load_load_npz(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1 || argc > 2) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
-  }
-  VALUE file_val   = argv[0];
-  VALUE stream_val = (argc == 2) ? argv[1] : Qnil;
-  mx::StreamOrDevice s = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
-
-  // In Python, load_npz returns std::unordered_map<std::string, mx::array>.
-  // For demonstration, we will just return an empty hash or a stub.
-  // In real code, you'd do something like:
-  //   auto dict = mx::load_npz(filename_or_stream, s);
-
-  std::unordered_map<std::string, mx::array> dict;
-
-  // Convert to Ruby
-  VALUE rb_dict = map_to_ruby_hash(dict);
-  return rb_dict;
-}
-
-static VALUE load_load_npy(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1 || argc > 2) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..2)", argc);
+static VALUE load_load(int argc, VALUE* argv, VALUE self) {
+  // Simple implementation of Python's load function
+  // In Python: load(file, format=None, device=None)
+  if (argc < 1 || argc > 3) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
   }
   
-  VALUE path_or_file = argv[0];
-  VALUE stream_val = (argc > 1) ? argv[1] : Qnil;
-  
-  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
-  
-  // Initialize result using a proper constructor with shape and dtype
-  mx::array result = mx::zeros({1}, mx::float32, stream);
-  
-  if (RB_TYPE_P(path_or_file, T_STRING)) {
-    std::string path_str = StringValueCStr(path_or_file);
-    // In actual code, you'd do:
-    //   result = mx::load(path_str, stream);
-    try {
-      result = mx::load(path_str, stream); // Real call to MLX
-      result.eval();
-    } catch (const std::exception& e) {
-      rb_raise(rb_eRuntimeError, "Error loading NPY file: %s", e.what());
-    }
-  } else if (is_readable_file(path_or_file)) {
-    // Got a Ruby IO-like object
-    auto reader = std::make_shared<RubyFileReader>(path_or_file);
-    try {
-      // In actual code: result = mx::load(reader, stream);
-      result = mx::load(reader, stream);
-      result.eval();  // Evaluate immediately
-    } catch (const std::exception& e) {
-      rb_raise(rb_eRuntimeError, "Error loading NPY file: %s", e.what());
-    }
-  } else {
-    rb_raise(rb_eTypeError, "Expected String or IO-like object");
-  }
-  
-  return wrap_array(result);
-}
-
-static VALUE load_save_npy(int argc, VALUE* argv, VALUE self) {
-  if (argc < 2 || argc > 3) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 2..3)", argc);
-  }
-  
-  VALUE path_or_file = argv[0];
-  VALUE array_val = argv[1];
+  VALUE file = argv[0];
+  VALUE format_val = (argc > 1) ? argv[1] : Qnil;
   VALUE stream_val = (argc > 2) ? argv[2] : Qnil;
   
-  mx::StreamOrDevice stream = NIL_P(stream_val) ? mx::StreamOrDevice{} : get_stream_or_device(stream_val);
-  mx::array& arr = get_array(array_val);
-  
-  if (RB_TYPE_P(path_or_file, T_STRING)) {
-    std::string path_str = StringValueCStr(path_or_file);
-    if (path_str.length() < 4 || path_str.substr(path_str.length() - 4, 4) != ".npy") {
-      path_str += ".npy";
-    }
-    try {
-      // Use MLX to actually save the array:
-      //   mx::save(path_str, arr);
-      std::ofstream ofs(path_str, std::ios::binary);
-      if (!ofs.is_open()) {
-        rb_raise(rb_eArgError, "Could not open output file: %s", path_str.c_str());
-      }
-      {
-        // If the MLX library has a direct overload:
-        //   mx::save(path_str, arr);
-        // or we do:
-        //   mx::save(ofs, arr);
-        // For demonstration:
-        //   arr.eval();
-      }
-      arr.eval();
-    } catch (const std::exception& e) {
-      rb_raise(rb_eRuntimeError, "Error saving NPY file: %s", e.what());
-    }
-  } else if (is_writable_file(path_or_file)) {
-    // Got a Ruby IO-like object
-    auto writer = std::make_shared<RubyFileWriter>(path_or_file);
-    
-    // Save the array
-    try {
-      // In a real implementation, we would save the array to the writer here
-      arr.eval();
-      // Real call:
-      //   mx::save(writer, arr);
-    } catch (const std::exception& e) {
-      rb_raise(rb_eRuntimeError, "Error saving NPY file: %s", e.what());
-    }
+  // Logic to determine format
+  std::optional<std::string> format;
+  if (!NIL_P(format_val)) {
+    format = std::string(StringValueCStr(format_val));
   } else {
-    rb_raise(rb_eTypeError, "Expected String or IO-like object");
+    // Auto-detect format based on file extension
+    if (RB_TYPE_P(file, T_STRING)) {
+      std::string path = StringValueCStr(file);
+      size_t pos = path.rfind('.');
+      if (pos != std::string::npos) {
+        std::string ext = path.substr(pos + 1);
+        if (ext == "npy") format = "npy";
+        else if (ext == "npz") format = "npz";
+        else if (ext == "json") format = "json";
+        else if (ext == "safetensors") format = "safetensors";
+        else if (ext == "gguf") format = "gguf";
+      }
+    }
   }
   
+  // Additional parameter for returning metadata
+  bool return_metadata = false;
+  // In Ruby, we'll eventually add support for optional named parameters. For now, hard-code to false.
+  
+  // Now route to correct loader
+  std::string f = *format;
+  if (f == "npy") {
+    // For .npy, metadata not supported
+    if (return_metadata) {
+      rb_raise(rb_eArgError, "[load] return_metadata not supported for npy/npz");
+    }
+    return load_load_npy(argc, argv, self); // or call the direct helper
+  } else if (f == "npz") {
+    if (return_metadata) {
+      rb_raise(rb_eArgError, "[load] return_metadata not supported for npz");
+    }
+    // We can just do same approach as python: call load_load_npz
+    VALUE args2[2] = { file, stream_val };
+    return load_load_npz(2, args2, self);
+  } else if (f == "safetensors") {
+    // Use load_safetensors
+    VALUE args2[2] = { file, stream_val };
+    VALUE safetensor_res = load_load_safetensors(2, args2, self);
+    if (!return_metadata) {
+      // If we aren't returning metadata, we just return the first part
+      // i.e. the dictionary of arrays
+      return rb_ary_entry(safetensor_res, 0);
+    } else {
+      return safetensor_res; // Already a 2-element array [tensor_map, metadata_map]
+    }
+  } else if (f == "gguf") {
+    // Use load_gguf
+    VALUE args2[2] = { file, stream_val };
+    VALUE gguf_res = load_load_gguf(2, args2, self);
+    if (!return_metadata) {
+      // first part of returned array
+      return rb_ary_entry(gguf_res, 0);
+    } else {
+      // if gguf_res is [tensors_hash, metadata_hash], return it
+      return gguf_res;
+    }
+  }
+  rb_raise(rb_eArgError, "[load] Unknown file format '%s'", f.c_str());
+  return Qnil; // unreachable
+}
+
+static VALUE load_load_shard(int argc, VALUE* argv, VALUE self) {
+  rb_raise(rb_eNotImpError, "The load_shard function is not yet implemented");
   return Qnil;
 }
 
-// Initialize load module
+static VALUE load_save(int argc, VALUE* argv, VALUE self) {
+  rb_raise(rb_eNotImpError, "General 'save' not implemented (analog to python's load).");
+  return Qnil;
+}
+
+static VALUE load_save_shard(int argc, VALUE* argv, VALUE self) {
+  rb_raise(rb_eNotImpError, "The save_shard function is not yet implemented");
+  return Qnil;
+}
+
 void init_load(VALUE module) {
-  // Define module functions
+  // Define module functions for loading
   rb_define_module_function(module, "load", RUBY_METHOD_FUNC(load_load), -1);
-  rb_define_module_function(module, "load_shard", RUBY_METHOD_FUNC(load_load_shard), -1);
-  rb_define_module_function(module, "save", RUBY_METHOD_FUNC(load_save), -1);
-  rb_define_module_function(module, "save_shard", RUBY_METHOD_FUNC(load_save_shard), -1);
-  rb_define_module_function(module, "load_safetensors", RUBY_METHOD_FUNC(load_load_safetensors), -1);
-  rb_define_module_function(module, "save_safetensors", RUBY_METHOD_FUNC(load_save_safetensors), -1);
-  rb_define_module_function(module, "load_gguf", RUBY_METHOD_FUNC(load_load_gguf), -1);
-  rb_define_module_function(module, "save_gguf", RUBY_METHOD_FUNC(load_save_gguf), -1);
   rb_define_module_function(module, "load_npy", RUBY_METHOD_FUNC(load_load_npy), -1);
-  rb_define_module_function(module, "save_npy", RUBY_METHOD_FUNC(load_save_npy), -1);
   rb_define_module_function(module, "load_npz", RUBY_METHOD_FUNC(load_load_npz), -1);
+  rb_define_module_function(module, "load_safetensors", RUBY_METHOD_FUNC(load_load_safetensors), -1);
+  rb_define_module_function(module, "load_gguf", RUBY_METHOD_FUNC(load_load_gguf), -1);
+  rb_define_module_function(module, "load_shard", RUBY_METHOD_FUNC(load_load_shard), -1);
+  
+  // Define module functions for saving
+  rb_define_module_function(module, "save", RUBY_METHOD_FUNC(load_save), -1);
+  rb_define_module_function(module, "save_npy", RUBY_METHOD_FUNC(load_save_npy), -1);
+  rb_define_module_function(module, "save_safetensors", RUBY_METHOD_FUNC(load_save_safetensors), -1);
+  rb_define_module_function(module, "save_gguf", RUBY_METHOD_FUNC(load_save_gguf), -1);
+  rb_define_module_function(module, "save_shard", RUBY_METHOD_FUNC(load_save_shard), -1);
   rb_define_module_function(module, "savez", RUBY_METHOD_FUNC(load_savez), -1);
   rb_define_module_function(module, "savez_compressed", RUBY_METHOD_FUNC(load_savez_compressed), -1);
 } 

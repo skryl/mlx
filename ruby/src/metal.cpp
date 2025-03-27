@@ -1,5 +1,6 @@
 #include <ruby.h>
 #include "mlx/backend/metal/metal.h"
+#include "mlx/memory.h"
 
 namespace mx = mlx::core;
 
