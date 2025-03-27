@@ -114,13 +114,16 @@ mx::array ruby_to_array(VALUE obj) {
       VALUE item = rb_ary_entry(obj, i);
       data.push_back(NUM2DBL(item));
     }
-    return mx::array(data);
+    
+    // Create a 1D array with the appropriate shape instead of passing vector directly
+    mx::Shape shape = {static_cast<int>(data.size())};
+    return mx::array(data.data(), shape, mx::float32);
   } else if (rb_obj_is_kind_of(obj, rb_cNumeric)) {
     // Convert Ruby numeric to MLX scalar array
     return mx::array(NUM2DBL(obj));
   } else {
     rb_raise(rb_eTypeError, "Cannot convert Ruby object to MLX array");
-    return mx::array(); // Dummy return to satisfy compiler
+    return mx::array({}, mx::float32); // Return empty array with float32 type
   }
 }
 
@@ -151,7 +154,26 @@ static VALUE convert_to_bool(VALUE self, VALUE arr) {
 
 static VALUE convert_to_type(VALUE self, VALUE arr, VALUE dtype) {
   mx::array& a = get_array(arr);
-  mx::Dtype d = static_cast<mx::Dtype::Val>(NUM2INT(dtype));
+  // Use the predefined Dtype constants instead of trying to create a default-constructed Dtype
+  mx::Dtype d = mx::float32; // Default to float32
+  int dtype_val = NUM2INT(dtype);
+  switch (dtype_val) {
+    case 0: d = mx::bool_; break;
+    case 1: d = mx::uint8; break;
+    case 2: d = mx::uint16; break;
+    case 3: d = mx::uint32; break;
+    case 4: d = mx::uint64; break;
+    case 5: d = mx::int8; break;
+    case 6: d = mx::int16; break;
+    case 7: d = mx::int32; break;
+    case 8: d = mx::int64; break;
+    case 9: d = mx::float16; break;
+    case 10: d = mx::float32; break;
+    case 11: d = mx::float64; break;
+    case 12: d = mx::bfloat16; break;
+    case 13: d = mx::complex64; break;
+    default: break; // Already defaulted to float32
+  }
   mx::array result = mx::astype(a, d);
   return wrap_array(result);
 }
