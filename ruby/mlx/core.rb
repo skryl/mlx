@@ -46,16 +46,16 @@ module MLX
     class Device; end
     class Stream; end
     class StreamContext; end
+    class Dtype; end
+    class GcFunc; end
 
     # Full Module List
     module Constants; end
     module Convert; end
-    module Dtype; end
     module Distributed; end
     module Export; end
     module FFT; end
     module Fast; end
-    module GcFunc; end
     module Indexing; end
     module Linalg; end
     module Load; end
@@ -68,7 +68,7 @@ module MLX
     module Utils; end
 
     def self.modules
-      [Constants, Convert, Dtype, Distributed, Export, FFT, Fast, GcFunc, Indexing, Linalg, Load, Memory, Metal, Ops, Random, Transforms, Trees, Utils]
+      [Constants, Convert, Distributed, Export, FFT, Fast, Indexing, Linalg, Load, Memory, Metal, Ops, Random, Transforms, Trees, Utils]
     end
     
     # IMPORTANT: All the module methods below are just placeholders.
@@ -762,12 +762,12 @@ module MLX
       end
 
       # rms_norm(x, weight=nil, eps, stream=nil)
-      def self.rms_norm(x, weight=nil, eps, stream=nil)
+      def self.rms_norm(x, weight=nil, eps=nil, stream=nil)
         # ...
       end
 
       # layer_norm(x, weight=nil, bias=nil, eps, stream=nil)
-      def self.layer_norm(x, weight=nil, bias=nil, eps, stream=nil)
+      def self.layer_norm(x, weight=nil, bias=nil, eps=nil, stream=nil)
         # ...
       end
 
@@ -1945,7 +1945,7 @@ module MLX
       def self.full(shape, fill_value, dtype, stream=nil); end
       def self.arange(start, stop, step, dtype, stream=nil); end
       def self.identity(n, dtype, stream=nil); end
-      def self.eye(n, m=nil, k=0, dtype, stream=nil); end
+      def self.eye(n, m=nil, k=0, dtype=nil, stream=nil); end
 
       def self.reshape(a, shape, stream=nil); end
       def self.flatten(a, start_axis, end_axis, stream=nil); end
@@ -2074,11 +2074,11 @@ module MLX
       def self.convolve(a, v, mode="full", stream=nil); end
       def self.conv1d(input, weight, stride=1, padding=0, dilation=1, groups=1, stream=nil); end
       def self.conv2d(input, weight, stride=1, padding=0, dilation=1, groups=1, stream=nil); end
-      def self.conv3d(...); end
-      def self.conv_transpose1d(...); end
-      def self.conv_transpose2d(...); end
-      def self.conv_transpose3d(...); end
-      def self.conv_general(...); end
+      def self.conv3d(input, weight, stride=1, padding=0, dilation=1, groups=1, stream=nil); end
+      def self.conv_transpose1d(input, weight, stride=1, padding=0, output_padding=0, groups=1, dilation=1, stream=nil); end
+      def self.conv_transpose2d(input, weight, stride=1, padding=0, output_padding=0, groups=1, dilation=1, stream=nil); end
+      def self.conv_transpose3d(input, weight, stride=1, padding=0, output_padding=0, groups=1, dilation=1, stream=nil); end
+      def self.conv_general(input, weight, strides, padding, dilation, groups, stream=nil); end
 
       def self.save(file, arr); end
       def self.savez(file, *args); end
@@ -2102,9 +2102,9 @@ module MLX
       def self.diagonal(a, offset=0, axis1=0, axis2=1, stream=nil); end
       def self.diag(a, k=0, stream=nil); end
       def self.trace(a, offset=0, axis1=0, axis2=1, dtype=nil, stream=nil); end
-      def self.atleast_1d(*arys, stream=nil); end
-      def self.atleast_2d(*arys, stream=nil); end
-      def self.atleast_3d(*arys, stream=nil); end
+      def self.atleast_1d(arys, stream=nil); end
+      def self.atleast_2d(arys, stream=nil); end
+      def self.atleast_3d(arys, stream=nil); end
       def self.issubdtype(arg1, arg2); end
       def self.bitwise_and(a, b, stream=nil); end
       def self.bitwise_or(a, b, stream=nil); end
@@ -2114,8 +2114,8 @@ module MLX
       def self.bitwise_invert(a, stream=nil); end
       def self.view(a, dtype, stream=nil); end
       def self.hadamard_transform(a, scale=nil, stream=nil); end
-      def self.einsum_path(subscripts, *operands); end
-      def self.einsum(subscripts, *operands, stream=nil); end
+      def self.einsum_path(subscripts, operands); end
+      def self.einsum(subscripts, operands, stream=nil); end
       def self.roll(a, shift, axis=nil, stream=nil); end
       def self.real(a, stream=nil); end
       def self.imag(a, stream=nil); end
