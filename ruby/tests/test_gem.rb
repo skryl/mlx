@@ -244,15 +244,45 @@ class TestGem < MLXTestCase
   def test_mathematical_constants
     puts "\nTesting Mathematical Constants"
     puts "--------------------------"
-    begin
-      puts "Pi: #{MLX::Core::pi}"
-      puts "E: #{MLX::Core::e}"
-      puts "Euler gamma: #{MLX::Core::euler_gamma}"
-      puts "Infinity: #{MLX::Core::inf}"
-      puts "NaN: #{MLX::Core::nan}"
-      puts "Newaxis: #{MLX::Core::newaxis}"
-    rescue => e
-      puts "Mathematical constants error: #{e.message}"
+    
+    # Test using the approach from test_module_structure
+    constant_methods = [
+      ['MLX::Core::Constants', :pi],
+      ['MLX::Core::Constants', :e],
+      ['MLX::Core::Constants', :euler_gamma],
+      ['MLX::Core::Constants', :inf],
+      ['MLX::Core::Constants', :nan],
+      ['MLX::Core::Constants', :newaxis],
+      ['MLX::Core', :pi],
+      ['MLX::Core', :e],
+      ['MLX::Core', :euler_gamma],
+      ['MLX::Core', :inf],
+      ['MLX::Core', :nan],
+      ['MLX::Core', :newaxis],
+      ['MLX', :pi],
+      ['MLX', :e],
+      ['MLX', :euler_gamma],
+      ['MLX', :inf],
+      ['MLX', :nan],
+      ['MLX', :newaxis]
+    ]
+    
+    constant_methods.each do |module_name, method_name|
+      begin
+        module_parts = module_name.split('::')
+        mod = Object
+        module_parts.each { |part| mod = mod.const_get(part) }
+        
+        if mod.respond_to?(method_name)
+          value = mod.send(method_name)
+          value_str = value.is_a?(Float) ? value.to_s : value.inspect
+          puts "#{module_name}.#{method_name}: #{value_str}"
+        else
+          puts "#{module_name}.#{method_name}: Not available"
+        end
+      rescue => e
+        puts "#{module_name}.#{method_name}: Error - #{e.message}"
+      end
     end
   end
   
@@ -375,7 +405,8 @@ class TestGem < MLXTestCase
     metal_methods = %w[metal_is_available start_metal_capture stop_metal_capture metal_device_info]
     test_methods_in_module("MLX::Core::Metal", metal_methods)
 
-    # Removed Linalg test since the module is uninitialized
+    # Add Linalg test
+    test_linalg_module
   end
   
   # Helper method to test methods in a module
@@ -393,6 +424,36 @@ class TestGem < MLXTestCase
         end
       rescue => e
         puts "#{module_name}.#{method_name}: Error - #{e.message}"
+      end
+    end
+  end
+  
+  def test_linalg_module
+    puts "\nTesting Linalg Module Functions"
+    puts "----------------------------"
+    linalg_methods = %w[
+      norm svd qr inv tri_inv cholesky cholesky_inv eigh eigvalsh
+      matmul det slogdet solve solve_triangular matrix_power
+      pinv cross lu lu_factor
+    ]
+    test_methods_in_module("MLX::Core::Linalg", linalg_methods)
+    
+    # Test MLX top-level linalg methods
+    puts "\nTesting Top-Level Linalg Functions"
+    puts "--------------------------------"
+    top_linalg_methods = %w[
+      norm svd det inv pinv solve
+    ]
+    
+    top_linalg_methods.each do |method_name|
+      begin
+        if MLX.respond_to?(method_name.to_sym)
+          puts "MLX.#{method_name}: Available"
+        else
+          puts "MLX.#{method_name}: MISSING"
+        end
+      rescue => e
+        puts "MLX.#{method_name}: Error - #{e.message}"
       end
     end
   end

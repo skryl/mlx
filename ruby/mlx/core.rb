@@ -21,7 +21,18 @@ module MLX
     FLOAT16 = :float16
     FLOAT32 = :float32
     BFLOAT16 = :bfloat16
+    FLOAT64 = :float64
     COMPLEX64 = :complex64
+    
+    # Type hierarchy constants
+    COMPLEXFLOATING = :complexfloating
+    FLOATING = :floating
+    INEXACT = :inexact
+    SIGNEDINTEGER = :signedinteger
+    UNSIGNEDINTEGER = :unsignedinteger
+    INTEGER = :integer
+    NUMBER = :number
+    GENERIC = :generic
     
     # Device constants
     CPU = :cpu
@@ -38,21 +49,22 @@ module MLX
     
     # Constants module - implemented in constants.cpp
     module Constants
-      PI = Math::PI
-      E = Math::E
-      EULER_GAMMA = 0.57721566490153286
-      INF = Float::INFINITY
-      NAN = Float::NAN
-      NEWAXIS = nil
+      # These will be overridden by the native extension
+      def self.pi; 3.141592653589793; end
+      def self.e; 2.718281828459045; end
+      def self.euler_gamma; 0.57721566490153286; end
+      def self.inf; Float::INFINITY; end
+      def self.nan; Float::NAN; end
+      def self.newaxis; nil; end
     end
     
     # Make constants available at module level 
-    def self.pi; Constants::PI; end
-    def self.e; Constants::E; end
-    def self.euler_gamma; Constants::EULER_GAMMA; end
-    def self.inf; Constants::INF; end
-    def self.nan; Constants::NAN; end
-    def self.newaxis; Constants::NEWAXIS; end
+    def self.pi; Constants.pi; end
+    def self.e; Constants.e; end
+    def self.euler_gamma; Constants.euler_gamma; end
+    def self.inf; Constants.inf; end
+    def self.nan; Constants.nan; end
+    def self.newaxis; Constants.newaxis; end
     
     # Device module - implemented in device.cpp
     module Device
@@ -246,6 +258,29 @@ module MLX
       def self.tanh(x); x; end
     end
     
+    # Linalg module - implemented in linalg.cpp
+    module Linalg
+      def self.norm(arr, ord = nil, axis = nil, keepdims = false, stream = nil); arr; end
+      def self.svd(arr, compute_uv = true, stream = nil); compute_uv ? [arr, arr, arr] : arr; end
+      def self.qr(arr, stream = nil); [arr, arr]; end
+      def self.inv(arr, stream = nil); arr; end
+      def self.tri_inv(arr, upper = false, stream = nil); arr; end
+      def self.cholesky(arr, upper = false, stream = nil); arr; end
+      def self.cholesky_inv(arr, upper = false, stream = nil); arr; end
+      def self.eigh(arr, upper = false, stream = nil); [arr, arr]; end
+      def self.eigvalsh(arr, upper = false, stream = nil); arr; end
+      def self.matmul(a, b, stream = nil); arr; end
+      def self.det(arr, stream = nil); arr; end
+      def self.slogdet(arr, stream = nil); [arr, arr]; end
+      def self.solve(a, b, stream = nil); arr; end
+      def self.solve_triangular(a, b, lower = true, unit_diagonal = false, stream = nil); arr; end
+      def self.matrix_power(a, n, stream = nil); arr; end
+      def self.pinv(a, rcond = 1e-15, hermitian = false, stream = nil); arr; end
+      def self.cross(a, b, axis = -1, stream = nil); arr; end
+      def self.lu(a, stream = nil); [arr, arr, arr]; end
+      def self.lu_factor(a, stream = nil); [arr, arr]; end
+    end
+    
     # Array class - implemented in array.cpp
     class Array
       attr_reader :shape, :dtype
@@ -403,7 +438,18 @@ module MLX
   FLOAT16 = Core::FLOAT16
   FLOAT32 = Core::FLOAT32
   BFLOAT16 = Core::BFLOAT16
+  FLOAT64 = Core::FLOAT64
   COMPLEX64 = Core::COMPLEX64
+  
+  # Type hierarchy constants at the top level
+  COMPLEXFLOATING = Core::COMPLEXFLOATING
+  FLOATING = Core::FLOATING
+  INEXACT = Core::INEXACT
+  SIGNEDINTEGER = Core::SIGNEDINTEGER
+  UNSIGNEDINTEGER = Core::UNSIGNEDINTEGER
+  INTEGER = Core::INTEGER
+  NUMBER = Core::NUMBER
+  GENERIC = Core::GENERIC
   
   # Device constants at the top level
   CPU = :cpu
@@ -415,8 +461,16 @@ module MLX
   Fast = Core::Fast
   FFT = Core::FFT
   Random = Core::Random
-  Linalg = Module.new  # Placeholder for now
+  Linalg = Core::Linalg
   Utils = Core::Utils
+  
+  # Access to mathematical constants
+  def self.pi; Core.pi; end
+  def self.e; Core.e; end
+  def self.euler_gamma; Core.euler_gamma; end
+  def self.inf; Core.inf; end
+  def self.nan; Core.nan; end
+  def self.newaxis; Core.newaxis; end
   
   # Top-level convenience methods
   
@@ -580,6 +634,12 @@ module MLX
   def self.matmul(a, b); a.matmul(b); end
   def self.dot(a, b); a.dot(b); end
   def self.vdot(a, b); a.vdot(b); end
+  def self.norm(a, ord = nil, axis = nil, keepdims = false); Core::Linalg.norm(a, ord, axis, keepdims); end
+  def self.svd(a, compute_uv = true); Core::Linalg.svd(a, compute_uv); end
+  def self.det(a); Core::Linalg.det(a); end
+  def self.inv(a); Core::Linalg.inv(a); end
+  def self.pinv(a, rcond = 1e-15); Core::Linalg.pinv(a, rcond); end
+  def self.solve(a, b); Core::Linalg.solve(a, b); end
   
   # Transformations
   def self.reshape(a, shape); a.reshape(shape); end
