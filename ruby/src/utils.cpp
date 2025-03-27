@@ -90,6 +90,46 @@ std::vector<int> get_reduce_axes(const std::variant<std::monostate, int, std::ve
   return axes;
 }
 
+// Helper function that mimics Python's to_array_with_accessor logic
+mx::array to_array_with_accessor(VALUE obj, std::optional<mx::Dtype> dtype) {
+  // If it's already an MLX::Core::Array, use it:
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+    return get_array(obj);
+  }
+
+  // If it responds to __mlx_array__, call that method to retrieve an MLX::Core::Array
+  if (rb_respond_to(obj, rb_intern("__mlx_array__"))) {
+    // obj.__mlx_array__() => presumably returns an MLX::Core::Array
+    VALUE arr_obj = rb_funcall(obj, rb_intern("__mlx_array__"), 0);
+    // Now convert whatever is returned from __mlx_array__ into a real mx::array
+    return to_array(arr_obj, dtype);
+  }
+
+  // Otherwise, raise an error
+  std::ostringstream msg;
+  msg << "Invalid type " << rb_obj_classname(obj)
+      << " received in array initialization: no __mlx_array__ accessor.";
+  rb_raise(rb_eTypeError, "%s", msg.str().c_str());
+
+  // Unreachable, but for completeness:
+  return mx::array(0.0f);
+}
+
+// Check whether the Ruby object is an MLX array OR array-like (has __mlx_array__).
+static bool is_mlx_array_or_arraylike(VALUE obj) {
+  // Is it already an MLX::Core::Array?
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+    return true;
+  }
+
+  // Does it respond to __mlx_array__?
+  if (rb_respond_to(obj, rb_intern("__mlx_array__"))) {
+    return true;
+  }
+
+  return false;
+}
+
 // Convert Ruby VALUE to mx::array
 mx::array to_array(VALUE v, std::optional<mx::Dtype> dtype) {
   if (NIL_P(v)) {
@@ -250,6 +290,11 @@ mx::array to_array(VALUE v, std::optional<mx::Dtype> dtype) {
   }
   
   rb_raise(rb_eTypeError, "Cannot convert to MLX array: unexpected type");
+
+  // Instead of raising, we could do the following to call the accessor fallback:
+  // return to_array_with_accessor(v, dtype);
+  // but we'll just raise for clarity. If you prefer, do that fallback approach:
+  // return to_array_with_accessor(v, dtype);
   return mx::array(0.0f); // To satisfy compiler
 }
 
@@ -259,17 +304,23 @@ std::pair<mx::array, mx::array> to_arrays(VALUE a, VALUE b) {
     return rb_obj_is_kind_of(x, rb_path2class("MLX::Core::Array"));
   };
   
-  if (is_mlx_array(a)) {
+  // In Python, we also accept "arraylike" (has __mlx_array__). So do that here:
+  if (is_mlx_array_or_arraylike(a)) {
     auto arr_a = get_array(a);
-    if (is_mlx_array(b)) {
+    if (is_mlx_array_or_arraylike(b)) {
       auto arr_b = get_array(b);
       return {arr_a, arr_b};
     }
     return {arr_a, to_array(b, arr_a.dtype())};
-  } else if (is_mlx_array(b)) {
+  } else if (is_mlx_array_or_arraylike(b)) {
     auto arr_b = get_array(b);
     return {to_array(a, arr_b.dtype()), arr_b};
   } else {
+    // Neither 'a' nor 'b' is an MLX array or array-like, so we treat them both
+    // as scalars or raw Ruby types.
+    // This matches the python logic:
+    // return {to_array(a), to_array(b)};
+
     return {to_array(a), to_array(b)};
   }
 }

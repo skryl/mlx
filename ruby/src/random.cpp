@@ -17,28 +17,32 @@ static mx::array& get_array(VALUE obj) {
   return *arr_ptr;
 }
 
-// Helper to extract Stream or Device from Ruby VALUE
-static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
-  if (NIL_P(obj)) {
-    return mx::StreamOrDevice{}; // Default empty stream/device
+// Helper to handle "scalar or MLX::Core::Array" the same way Python does.
+static mx::array to_mx_array(VALUE obj) {
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Core::Array"))) {
+    return get_array(obj);
   }
-  
-  // Check if it's a Stream object
-  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
-    mx::Stream* stream_ptr;
-    Data_Get_Struct(obj, mx::Stream, stream_ptr);
-    return *stream_ptr;
+  else if (RB_TYPE_P(obj, T_FIXNUM) || RB_TYPE_P(obj, T_BIGNUM)) {
+    // integer -> wrap in an array
+    int64_t val = NUM2LL(obj);
+    return mx::array((int64_t) val);
   }
-  
-  // Check if it's a Device object
-  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
-    mx::Device* device_ptr;
-    Data_Get_Struct(obj, mx::Device, device_ptr);
-    return *device_ptr;
+  else if (RB_TYPE_P(obj, T_FLOAT)) {
+    double val = NUM2DBL(obj);
+    return mx::array((double) val);
   }
-  
-  rb_raise(rb_eTypeError, "Expected Stream or Device object");
-  return mx::StreamOrDevice{}; // Never reached
+  else if (NIL_P(obj)) {
+    // Some code might pass nil -> treat as None => empty optional
+    // Return a default array or handle it differently
+    // e.g., raise an error or return an "empty" array
+    // For demonstration, let's raise:
+    rb_raise(rb_eArgError, "Expected numeric or MLX::Core::Array, got nil");
+  }
+  else {
+    rb_raise(rb_eTypeError, "Expected numeric or MLX::Core::Array");
+  }
+  // Unreachable
+  return mx::array(0.0f);
 }
 
 // Helper function to convert Ruby integer to mx::Dtype
@@ -260,7 +264,10 @@ static VALUE random_randint(int argc, VALUE* argv, VALUE self) {
   // Parse arguments based on position and count
   if (argc >= 1) low_val = NUM2INT(argv[0]);
   if (argc >= 2) high_val = NUM2INT(argv[1]);
-  if (argc >= 3 && !NIL_P(argv[2])) shape = ruby_array_to_vector(argv[2]);
+  if (argc >= 3 && !NIL_P(argv[2])) {
+    // shape can remain shape
+    shape = ruby_array_to_vector(argv[2]);
+  }
   if (argc >= 4 && !NIL_P(argv[3])) dtype = int_to_dtype(NUM2INT(argv[3]));
   
   // Handle key - use default if not provided
@@ -271,6 +278,17 @@ static VALUE random_randint(int argc, VALUE* argv, VALUE self) {
   // Handle stream
   if (argc >= 6) stream = get_stream_or_device(argv[5]);
   
+  // Note: The Python randint() handles low/high as "scalar or array".
+  // but the Python side can pass either a scalar or array for low/high.
+  // To match that, we'd do something like:
+  //
+  // mx::array low_arr  = to_mx_array(argv[0]);
+  // mx::array high_arr = to_mx_array(argv[1]);
+  // mx::array result   = mx::random::randint(low_arr, high_arr, shape, dtype, key_opt, stream);
+  //
+  // For now, we continue with the scalar approach. If you want true parity with
+  // Python, replace the lines below with the above approach:
+
   mx::array result = mx::random::randint(low_val, high_val, shape, dtype, key_opt, stream);
   return wrap_array(result);
 }
@@ -359,33 +377,46 @@ static VALUE random_truncated_normal(int argc, VALUE* argv, VALUE self) {
 }
 
 static VALUE random_categorical(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1 || argc > 5) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..5)", argc);
+  // Python signature:
+  //   def categorical(logits, axis=-1, shape=None, num_samples=None, key=None, stream=None)
+  // We want the same pattern. So we parse up to 5 or 6 arguments:
+  //
+  // Ruby side: "logits, axis, shape, num_samples, key, stream"
+  if (argc < 1) {
+    rb_raise(rb_eArgError, "categorical requires at least 'logits' argument");
   }
-  
-  VALUE logits = argv[0];
-  mx::array& logits_arr = get_array(logits);
-  
-  // Default values
-  int num_samples = 1;
-  int axis = -1;
-  std::optional<mx::array> key_opt = std::nullopt;
-  mx::StreamOrDevice stream = {};
-  
-  // Parse arguments based on position and count
-  if (argc >= 2) num_samples = NUM2INT(argv[1]);
-  if (argc >= 3) axis = NUM2INT(argv[2]);
-  
-  // Handle key - use default if not provided
-  if (argc >= 4 && !NIL_P(argv[3])) {
-    key_opt = get_array(argv[3]);
+
+  VALUE logits_obj   = argv[0];
+  VALUE axis_obj     = (argc >= 2 ? argv[1] : Qnil);
+  VALUE shape_obj    = (argc >= 3 ? argv[2] : Qnil);
+  VALUE n_samp_obj   = (argc >= 4 ? argv[3] : Qnil);
+  VALUE key_obj      = (argc >= 5 ? argv[4] : Qnil);
+  VALUE stream_obj   = (argc >= 6 ? argv[5] : Qnil);
+
+  mx::array& logits_arr = get_array(logits_obj);
+  int axis = NIL_P(axis_obj) ? -1 : NUM2INT(axis_obj);
+
+  // shape or num_samples?
+  bool have_shape      = (!NIL_P(shape_obj));
+  bool have_num_samp   = (!NIL_P(n_samp_obj));
+  if (have_shape && have_num_samp) {
+    rb_raise(rb_eArgError, "At most one of shape or num_samples can be specified.");
   }
-  
-  // Handle stream
-  if (argc >= 5) stream = get_stream_or_device(argv[4]);
-  
-  mx::array result = mx::random::categorical(logits_arr, axis, num_samples, key_opt, stream);
-  return wrap_array(result);
+
+  std::optional<mx::array> key_opt = get_key_opt(key_obj);
+  mx::StreamOrDevice stream = get_stream_or_device(stream_obj);
+
+  if (have_shape) {
+    // shape is a Ruby array
+    std::vector<int> shape_vec = ruby_array_to_vector(shape_obj);
+    return wrap_array(mx::random::categorical(logits_arr, axis, shape_vec, key_opt, stream));
+  } else if (have_num_samp) {
+    int ns = NUM2INT(n_samp_obj);
+    return wrap_array(mx::random::categorical(logits_arr, axis, ns, key_opt, stream));
+  } else {
+    // neither shape nor num_samples => single-sample distribution
+    return wrap_array(mx::random::categorical(logits_arr, axis, key_opt, stream));
+  }
 }
 
 static VALUE random_gumbel(int argc, VALUE* argv, VALUE self) {
@@ -484,6 +515,37 @@ static VALUE random_permutation(int argc, VALUE* argv, VALUE self) {
   return wrap_array(result);
 }
 
+// Expose the default PRNG state, similar to 'm.attr("state") = default_key().state()' in Python.
+static VALUE random_state(VALUE self) {
+  // The C++ KeySequence in Ruby only has a single mx::array 'state'.
+  // Return that as an MLX::Core::Array Ruby object.
+  return wrap_array(default_key().state);
+}
+
+// Helper to extract Stream or Device from Ruby VALUE
+static mx::StreamOrDevice get_stream_or_device(VALUE obj) {
+  if (NIL_P(obj)) {
+    return mx::StreamOrDevice{}; // Default empty stream/device
+  }
+  
+  // Check if it's a Stream object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Stream"))) {
+    mx::Stream* stream_ptr;
+    Data_Get_Struct(obj, mx::Stream, stream_ptr);
+    return *stream_ptr;
+  }
+  
+  // Check if it's a Device object
+  if (rb_obj_is_kind_of(obj, rb_path2class("MLX::Device"))) {
+    mx::Device* device_ptr;
+    Data_Get_Struct(obj, mx::Device, device_ptr);
+    return *device_ptr;
+  }
+  
+  rb_raise(rb_eTypeError, "Expected Stream or Device object");
+  return mx::StreamOrDevice{}; // Never reached
+}
+
 // Initialize random module
 void init_random(VALUE module) {
   // Define module methods
@@ -494,6 +556,7 @@ void init_random(VALUE module) {
   rb_define_module_function(module, "normal", RUBY_METHOD_FUNC(random_normal), -1);
   rb_define_module_function(module, "multivariate_normal", RUBY_METHOD_FUNC(random_multivariate_normal), -1);
   rb_define_module_function(module, "randint", RUBY_METHOD_FUNC(random_randint), -1);
+  rb_define_module_function(module, "state", RUBY_METHOD_FUNC(random_state), 0);
   rb_define_module_function(module, "bernoulli", RUBY_METHOD_FUNC(random_bernoulli), -1);
   rb_define_module_function(module, "truncated_normal", RUBY_METHOD_FUNC(random_truncated_normal), -1);
   rb_define_module_function(module, "categorical", RUBY_METHOD_FUNC(random_categorical), -1);

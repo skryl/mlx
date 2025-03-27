@@ -1,5 +1,6 @@
 #include <ruby.h>
 #include "mlx/transforms.h"
+#include "mlx/compile.h" // for compile / disable_compile / enable_compile
 #include "mlx/ops.h"
 #include "mlx/utils.h"
 #include "utils.h"
@@ -366,6 +367,103 @@ static VALUE transforms_moveaxis(int argc, VALUE* argv, VALUE self) {
   return wrap_array(result);
 }
 
+// Eval functions - with proper stream support
+static VALUE transforms_eval(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1) {
+    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 1)", argc);
+  }
+  
+  // Process a batch of arrays to support mx.eval(a, b, c) syntax like in Python
+  std::vector<mx::array> arrays;
+  for (int i = 0; i < argc; i++) {
+    VALUE arr = argv[i];
+    if (!rb_obj_is_kind_of(arr, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "Expected MLX::Core::Array objects");
+    }
+    arrays.push_back(get_array(arr));
+  }
+  
+  mx::eval(arrays);
+  
+  // Return the original array(s) - if just one array, return it directly
+  return argc == 1 ? argv[0] : rb_ary_new4(argc, argv);
+}
+
+/*
+ * async_eval(*arrays)
+ *
+ * Asynchronously evaluate one or more arrays.
+ */
+static VALUE transforms_async_eval(int argc, VALUE* argv, VALUE self) {
+  if (argc < 1) {
+    rb_raise(rb_eArgError, "wrong number of arguments for async_eval (given %d, expected >=1)", argc);
+  }
+
+  std::vector<mx::array> arrays;
+  for (int i = 0; i < argc; i++) {
+    VALUE arr = argv[i];
+    if (!rb_obj_is_kind_of(arr, rb_path2class("MLX::Core::Array"))) {
+      rb_raise(rb_eTypeError, "async_eval expects only MLX::Core::Array objects");
+    }
+    arrays.push_back(get_array(arr));
+  }
+  mx::async_eval(arrays);
+
+  // Return original array(s)
+  return argc == 1 ? argv[0] : rb_ary_new4(argc, argv);
+}
+
+/*
+ * jvp(fun, primals, tangents)
+ *   Currently a stub. You must implement logic to:
+ *   - Flatten the 'primals' and 'tangents'
+ *   - Call mx::jvp(...) on a suitable lambda
+ */
+static VALUE transforms_jvp(int argc, VALUE* argv, VALUE self) {
+  rb_notimplement();
+  return Qnil;
+}
+
+/*
+ * vjp(fun, primals, cotangents)
+ */
+static VALUE transforms_vjp(int argc, VALUE* argv, VALUE self) {
+  rb_notimplement();
+  return Qnil;
+}
+
+/*
+ * vmap(fun, in_axes=0, out_axes=0)
+ */
+static VALUE transforms_vmap(int argc, VALUE* argv, VALUE self) {
+  rb_notimplement();
+  return Qnil;
+}
+
+/*
+ * compile(fun, inputs=nil, outputs=nil, shapeless=false)
+ */
+static VALUE transforms_compile(int argc, VALUE* argv, VALUE self) {
+  rb_notimplement();
+  return Qnil;
+}
+
+/*
+ * disable_compile()
+ */
+static VALUE transforms_disable_compile(VALUE self) {
+  mx::disable_compile();
+  return Qnil;
+}
+
+/*
+ * enable_compile()
+ */
+static VALUE transforms_enable_compile(VALUE self) {
+  mx::enable_compile();
+  return Qnil;
+}
+
 // Advanced transforms - placeholder implementations for now
 static VALUE transforms_checkpoint(int argc, VALUE* argv, VALUE self) {
   if (argc < 1 || argc > 2) {
@@ -376,6 +474,7 @@ static VALUE transforms_checkpoint(int argc, VALUE* argv, VALUE self) {
   return Qnil;
 }
 
+// value_and_grad(fun, argnums=nil, argnames=[])
 static VALUE transforms_value_and_grad(int argc, VALUE* argv, VALUE self) {
   if (argc < 1 || argc > 3) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
@@ -385,6 +484,7 @@ static VALUE transforms_value_and_grad(int argc, VALUE* argv, VALUE self) {
   return Qnil;
 }
 
+// grad(fun, argnums=nil, argnames=[])
 static VALUE transforms_grad(int argc, VALUE* argv, VALUE self) {
   if (argc < 1 || argc > 3) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1..3)", argc);
@@ -409,28 +509,6 @@ static VALUE transforms_stop_gradient(int argc, VALUE* argv, VALUE self) {
   return wrap_array(result);
 }
 
-// Eval functions - with proper stream support
-static VALUE transforms_eval(int argc, VALUE* argv, VALUE self) {
-  if (argc < 1) {
-    rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected at least 1)", argc);
-  }
-  
-  // Process a batch of arrays to support mx.eval(a, b, c) syntax like in Python
-  std::vector<mx::array> arrays;
-  for (int i = 0; i < argc; i++) {
-    VALUE arr = argv[i];
-    if (!rb_obj_is_kind_of(arr, rb_path2class("MLX::Core::Array"))) {
-      rb_raise(rb_eTypeError, "Expected MLX::Core::Array objects");
-    }
-    arrays.push_back(get_array(arr));
-  }
-  
-  mx::eval(arrays);
-  
-  // Return the original array(s) - if just one array, return it directly
-  return argc == 1 ? argv[0] : rb_ary_new4(argc, argv);
-}
-
 static VALUE transforms_eval_batch(int argc, VALUE* argv, VALUE self) {
   if (argc != 1) {
     rb_raise(rb_eArgError, "wrong number of arguments (given %d, expected 1)", argc);
@@ -450,6 +528,49 @@ static VALUE transforms_eval_batch(int argc, VALUE* argv, VALUE self) {
   
   mx::eval(cpp_arrays);
   return arrays;
+}
+
+/*
+ * class MLX::Core::CustomFunction
+ *
+ * This mirrors the Python-class `custom_function` (PyCustomFunction).
+ * We'll stub out the behaviors so the interface is present. You can fill
+ * in the details as needed.
+ */
+static VALUE cCustomFunction = Qnil;
+
+// CustomFunction#initialize(fun)
+static VALUE custom_function_initialize(VALUE self, VALUE fun) {
+  // Store the 'fun' in an instance variable to call later
+  rb_iv_set(self, "@fun", fun);
+  return self;
+}
+
+// CustomFunction#call(*args, **kwargs)
+static VALUE custom_function_call(int argc, VALUE* argv, VALUE self) {
+  rb_notimplement();
+  return Qnil;
+}
+
+// CustomFunction#vjp(f)
+static VALUE custom_function_vjp(VALUE self, VALUE transform_func) {
+  // store it to @vjp_func for example
+  rb_iv_set(self, "@vjp_func", transform_func);
+  return self;
+}
+
+// CustomFunction#jvp(f)
+static VALUE custom_function_jvp(VALUE self, VALUE transform_func) {
+  // store it to @jvp_func for example
+  rb_iv_set(self, "@jvp_func", transform_func);
+  return self;
+}
+
+// CustomFunction#vmap(f)
+static VALUE custom_function_vmap(VALUE self, VALUE transform_func) {
+  // store it to @vmap_func
+  rb_iv_set(self, "@vmap_func", transform_func);
+  return self;
 }
 
 // Initialize transforms module
@@ -473,9 +594,31 @@ void init_transforms(VALUE module) {
   rb_define_module_function(module, "checkpoint", RUBY_METHOD_FUNC(transforms_checkpoint), -1);
   rb_define_module_function(module, "value_and_grad", RUBY_METHOD_FUNC(transforms_value_and_grad), -1);
   rb_define_module_function(module, "grad", RUBY_METHOD_FUNC(transforms_grad), -1);
+  // The newly added stubs
+  rb_define_module_function(module, "jvp", RUBY_METHOD_FUNC(transforms_jvp), -1);
+  rb_define_module_function(module, "vjp", RUBY_METHOD_FUNC(transforms_vjp), -1);
+  rb_define_module_function(module, "vmap", RUBY_METHOD_FUNC(transforms_vmap), -1);
+  rb_define_module_function(module, "compile", RUBY_METHOD_FUNC(transforms_compile), -1);
+  rb_define_module_function(module, "disable_compile", RUBY_METHOD_FUNC(transforms_disable_compile), 0);
+  rb_define_module_function(module, "enable_compile", RUBY_METHOD_FUNC(transforms_enable_compile), 0);
+  
   rb_define_module_function(module, "stop_gradient", RUBY_METHOD_FUNC(transforms_stop_gradient), -1);
   
   // Evaluation functions
   rb_define_module_function(module, "eval", RUBY_METHOD_FUNC(transforms_eval), -1);
   rb_define_module_function(module, "eval_batch", RUBY_METHOD_FUNC(transforms_eval_batch), -1);
+  rb_define_module_function(module, "async_eval", RUBY_METHOD_FUNC(transforms_async_eval), -1);
+  
+  // Define class MLX::Core::CustomFunction for the custom_function decorator
+  // (Under the same top-level module, or under "MLX::Core" if that's how your
+  //  module structure is laid out; adjust as needed.)
+  VALUE cCore = rb_path2class("MLX::Core");
+  cCustomFunction = rb_define_class_under(cCore, "CustomFunction", rb_cObject);
+  
+  rb_define_method(cCustomFunction, "initialize", RUBY_METHOD_FUNC(custom_function_initialize), 1);
+  // we let "def call(*args)" take -1
+  rb_define_method(cCustomFunction, "call", RUBY_METHOD_FUNC(custom_function_call), -1);
+  rb_define_method(cCustomFunction, "vjp", RUBY_METHOD_FUNC(custom_function_vjp), 1);
+  rb_define_method(cCustomFunction, "jvp", RUBY_METHOD_FUNC(custom_function_jvp), 1);
+  rb_define_method(cCustomFunction, "vmap", RUBY_METHOD_FUNC(custom_function_vmap), 1);
 } 
