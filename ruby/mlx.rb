@@ -37,6 +37,19 @@ module MLX
   
     def self.array(data, dtype = nil); Core::Array.new(data, dtype: dtype); end
 
+    # Method aliases at the module level
+    def self.version
+        Core.version
+    end
+    
+    # Constants module methods
+    def self.pi; Core.pi; end
+    def self.e; Core.e; end
+    def self.euler_gamma; Core.euler_gamma; end
+    def self.inf; Core.inf; end
+    def self.nan; Core.nan; end
+    def self.newaxis; Core.newaxis; end
+
     def self.core
         Core
     end
@@ -117,9 +130,7 @@ module MLX
         Core::Math
     end
 
-    def self.linalg
-        Core::Linalg
-    end
+
 
     # Methods delegating to Core::Ops 
     def self.zeros(shape, dtype = nil, stream = nil); Core::Ops.zeros(shape, dtype, stream); end
@@ -228,6 +239,10 @@ module MLX
     def self.avg_pool2d(x, kernel_size, stride = nil, padding = 0); x.avg_pool2d(kernel_size, stride, padding); end
     def self.avg_pool3d(x, kernel_size, stride = nil, padding = 0); x.avg_pool3d(kernel_size, stride, padding); end
 
+    # Methods delegating to x (Type operations)
+    def self.astype(x, dtype); x.astype(dtype); end
+
+
     
     # Methods delegating to Core::Device (Device operations)
     def self.to_cpu(x); Core::Device.to_cpu(x); end
@@ -277,10 +292,6 @@ module MLX
     def self.sin(x); Core::Math.sin(x); end
     def self.tanh(x); Core::Math.tanh(x); end
     
-    # Methods delegating to Core::Constants
-    def self.e; Core::Constants.e; end
-    def self.pi; Core::Constants.pi; end
-    
     # Methods delegating to Core::Stream
     def self.default_stream; Core::Stream.default_stream; end
     def self.new_stream; Core::Stream.new_stream; end
@@ -304,7 +315,11 @@ module MLX
     def self.float32(x); Core::Convert.to_type(x, Core::FLOAT32); end
     def self.int16(x); Core::Convert.to_type(x, Core::INT16); end
     
-    # Methods delegating to Core::Array
-    def self.astype(x, dtype); x.astype(dtype); end
+    # Methods delegating to Core::Linalg
+    def self.matmul(a, b, stream = nil); arr; end
+
+    # Core:Ops (missing)
+    # def self.softmax
+    # def self.minimum
 
 end

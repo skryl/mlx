@@ -123,13 +123,13 @@ module MLX
           end
           
           # Standard scaled dot-product attention with ALiBi mask
-          scores = MLX::Core.matmul(q, k.transpose(0, 1, 3, 2))
+          scores = MLX.matmul(q, k.transpose(0, 1, 3, 2))
           scores = scores / Math.sqrt(q.shape[-1])
           scores = scores + alibi_mask
           
           # Apply softmax and do attention
-          attn_weights = MLX::Core.softmax(scores, axis: -1)
-          MLX::Core.matmul(attn_weights, v)
+          attn_weights = MLX.softmax(scores, axis: -1)
+          MLX.matmul(attn_weights, v)
         end
       end
     end

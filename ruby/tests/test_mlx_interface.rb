@@ -7,7 +7,6 @@ class TestMLXInterface < MLXTestCase
     
     # Test if MLX.array delegates to MLX::Core.array
     puts "MLX responds to array: #{MLX.respond_to?(:array)}"
-    puts "MLX::Core responds to array: #{MLX::Core.respond_to?(:array)}"
     
     # Create array using MLX::Core directly - this is known to work
     core_arr = MLX::Core::Array.new([1, 2, 3])

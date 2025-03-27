@@ -323,6 +323,21 @@ module MLX
       def ==(other)
         other.is_a?(Device) && @device_type == other.type
       end
+      
+      # Class methods that delegate to instance methods
+      class << self
+        def type(device)
+          device.type
+        end
+        
+        def to_s(device)
+          device.to_s
+        end
+        
+        def equal(device, other)
+          device == other
+        end
+      end
     end
 
 
@@ -372,6 +387,21 @@ module MLX
       def split(color, key)
         # Implementation in C++
       end
+      
+      # Class methods that delegate to instance methods
+      class << self
+        def rank(group)
+          group.rank
+        end
+        
+        def size(group)
+          group.size
+        end
+        
+        def split(group, color, key)
+          group.split(color, key)
+        end
+      end
     end
 
 
@@ -416,6 +446,21 @@ module MLX
       def inspect
         "Stream(#{@device})"
       end
+      
+      # Class methods that delegate to instance methods
+      class << self
+        def device(stream)
+          stream.device
+        end
+        
+        def equal(stream, other)
+          stream == other
+        end
+        
+        def inspect(stream)
+          stream.inspect
+        end
+      end
     end
 
 
@@ -435,6 +480,13 @@ module MLX
       # def exit(status = nil, error = nil, info = nil)
       #   # Implementation in C++
       # end
+      
+      # Class methods that delegate to instance methods
+      class << self
+        def enter(context)
+          context.enter
+        end
+      end
     end
 
     # Array class - implemented in array.cpp
@@ -548,9 +600,139 @@ module MLX
       def <=(other); self; end
       def >(other); self; end
       def >=(other); self; end
+      
+      # Define class methods that delegate to instance methods
+      class << self
+        # Mathematical operations
+        def abs(array); array.abs; end
+        def square(array); array.square; end
+        def sqrt(array); array.sqrt; end
+        def rsqrt(array); array.rsqrt; end
+        def reciprocal(array); array.reciprocal; end
+        def exp(array); array.exp; end
+        def log(array); array.log; end
+        def log2(array); array.log2; end
+        def log10(array); array.log10; end
+        def log1p(array); array.log1p; end
+        def sin(array); array.sin; end
+        def cos(array); array.cos; end
+        
+        # Transformations
+        def reshape(array, shape); array.reshape(shape); end
+        def flatten(array); array.flatten; end
+        def squeeze(array, axes = nil); array.squeeze(axes); end
+        def transpose(array, axes = nil); array.transpose(axes); end
+        def moveaxis(array, source, destination); array.moveaxis(source, destination); end
+        def swapaxes(array, axis1, axis2); array.swapaxes(axis1, axis2); end
+        def split(array, indices_or_sections, axis = 0); array.split(indices_or_sections, axis); end
+        def diagonal(array, offset = 0, axis1 = 0, axis2 = 1); array.diagonal(offset, axis1, axis2); end
+        def diag(array, k = 0); array.diag(k); end
+        
+        # Reductions
+        def all(array, axis = nil, keepdims = false); array.all(axis, keepdims); end
+        def any(array, axis = nil, keepdims = false); array.any(axis, keepdims); end
+        def sum(array, axis = nil, keepdims = false); array.sum(axis, keepdims); end
+        def prod(array, axis = nil, keepdims = false); array.prod(axis, keepdims); end
+        def min(array, axis = nil, keepdims = false); array.min(axis, keepdims); end
+        def max(array, axis = nil, keepdims = false); array.max(axis, keepdims); end
+        def mean(array, axis = nil, keepdims = false); array.mean(axis, keepdims); end
+        def logsumexp(array, axis = nil, keepdims = false); array.logsumexp(axis, keepdims); end
+        def std(array, axis = nil, keepdims = false); array.std(axis, keepdims); end
+        def var(array, axis = nil, keepdims = false); array.var(axis, keepdims); end
+        
+        # Indexing operations
+        def argmin(array, axis = nil, keepdims = false); array.argmin(axis, keepdims); end
+        def argmax(array, axis = nil, keepdims = false); array.argmax(axis, keepdims); end
+        def cumsum(array, axis = 0); array.cumsum(axis); end
+        def cumprod(array, axis = 0); array.cumprod(axis); end
+        def cummax(array, axis = 0); array.cummax(axis); end
+        def cummin(array, axis = 0); array.cummin(axis); end
+        
+        # Additional operations
+        def round(array, decimals = 0); array.round(decimals); end
+        def matmul(array, other); array.matmul(other); end
+        def floor_div(array, other); array.floor_div(other); end
+        
+        # Arithmetic operations
+        def add(array, other); array + other; end
+        def subtract(array, other); array - other; end
+        def multiply(array, other); array * other; end
+        def divide(array, other); array / other; end
+        def mod(array, other); array % other; end
+        
+        # Comparison operations
+        def equal(array, other); array == other; end
+        def not_equal(array, other); array != other; end
+        def less(array, other); array < other; end
+        def less_equal(array, other); array <= other; end
+        def greater(array, other); array > other; end
+        def greater_equal(array, other); array >= other; end
+        
+        # Bitwise operations
+        def bitwise_and(array, other); array & other; end
+        def bitwise_or(array, other); array | other; end
+        def bitwise_xor(array, other); array ^ other; end
+        def left_shift(array, other); array << other; end
+        def right_shift(array, other); array >> other; end
+      end
     end
     
   end
+  
+  # Create aliases for Core constants, modules, and classes
+  # Data type constants
+  BOOL = Core::BOOL
+  UINT8 = Core::UINT8
+  UINT16 = Core::UINT16
+  UINT32 = Core::UINT32
+  UINT64 = Core::UINT64
+  INT8 = Core::INT8
+  INT16 = Core::INT16
+  INT32 = Core::INT32
+  INT64 = Core::INT64
+  FLOAT16 = Core::FLOAT16
+  FLOAT32 = Core::FLOAT32
+  BFLOAT16 = Core::BFLOAT16
+  FLOAT64 = Core::FLOAT64
+  COMPLEX64 = Core::COMPLEX64
+  
+  # Type hierarchy constants
+  COMPLEXFLOATING = Core::COMPLEXFLOATING
+  FLOATING = Core::FLOATING
+  INEXACT = Core::INEXACT
+  SIGNEDINTEGER = Core::SIGNEDINTEGER
+  UNSIGNEDINTEGER = Core::UNSIGNEDINTEGER
+  INTEGER = Core::INTEGER
+  NUMBER = Core::NUMBER
+  GENERIC = Core::GENERIC
+  
+  # Device constants
+  CPU = Core::CPU
+  GPU = Core::GPU
+  
+  # Module aliases
+  Constants = Core::Constants
+  Random = Core::Random
+  Metal = Core::Metal
+  Memory = Core::Memory
+  FFT = Core::FFT
+  Fast = Core::Fast
+  Indexing = Core::Indexing
+  Ops = Core::Ops
+  Transforms = Core::Transforms
+  Trees = Core::Trees
+  Convert = Core::Convert
+  Load = Core::Load
+  Utils = Core::Utils
+  Math = Core::Math
+  Linalg = Core::Linalg
+  
+  # Class aliases
+  Device = Core::Device
+  Group = Core::Group
+  Stream = Core::Stream
+  StreamContext = Core::StreamContext
+  Array = Core::Array
 end
   
 

@@ -288,7 +288,7 @@ module MLX
 
         def forward(x)
           # Implement transposed convolution using MLX primitives
-          result = MLX::Core.conv_transpose1d(x, @weight, stride: @stride, padding: @padding, 
+          result = MLX.conv_transpose1d(x, @weight, stride: @stride, padding: @padding, 
                                        output_padding: @output_padding, dilation: @dilation, groups: @groups)
           
           # Apply bias if present
@@ -333,7 +333,7 @@ module MLX
 
         def forward(x)
           # Implement transposed convolution using MLX primitives
-          result = MLX::Core.conv_transpose2d(x, @weight, stride: @stride, padding: @padding, 
+          result = MLX.conv_transpose2d(x, @weight, stride: @stride, padding: @padding, 
                                        output_padding: @output_padding, dilation: @dilation, groups: @groups)
           
           # Apply bias if present
@@ -378,7 +378,7 @@ module MLX
 
         def forward(x)
           # Implement transposed convolution using MLX primitives
-          result = MLX::Core.conv_transpose3d(x, @weight, stride: @stride, padding: @padding, 
+          result = MLX.conv_transpose3d(x, @weight, stride: @stride, padding: @padding, 
                                        output_padding: @output_padding, dilation: @dilation, groups: @groups)
           
           # Apply bias if present

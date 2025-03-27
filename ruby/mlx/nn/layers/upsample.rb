@@ -84,7 +84,7 @@ module MLX
             idx_f = MLX::Array.arange(size) * scale
             idx_l = idx_f.floor.to_i
             idx_r = idx_l + 1
-            idx_r = MLX::Core.minimum(idx_r, MLX::Array.full_like(idx_r, length - 1))
+            idx_r = MLX.minimum(idx_r, MLX::Array.full_like(idx_r, length - 1))
             
             weight_r = idx_f - idx_l
             weight_l = 1 - weight_r
@@ -130,13 +130,13 @@ module MLX
             y_f = MLX::Array.arange(height) * h_scale
             y_l = y_f.floor.to_i
             y_h = y_l + 1
-            y_h = MLX::Core.minimum(y_h, MLX::Array.full_like(y_h, in_h - 1))
+            y_h = MLX.minimum(y_h, MLX::Array.full_like(y_h, in_h - 1))
             
             # Get x coordinates
             x_f = MLX::Array.arange(width) * w_scale
             x_l = x_f.floor.to_i
             x_h = x_l + 1
-            x_h = MLX::Core.minimum(x_h, MLX::Array.full_like(x_h, in_w - 1))
+            x_h = MLX.minimum(x_h, MLX::Array.full_like(x_h, in_w - 1))
             
             # Get weights
             w_yl = (y_f - y_l).reshape(height, 1)

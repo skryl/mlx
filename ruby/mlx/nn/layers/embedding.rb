@@ -28,7 +28,7 @@ module MLX
         
         def forward(x)
           # Take embeddings according to the indices in x
-          MLX::Core.take(weight, x, axis: 0)
+          MLX.take(weight, x, axis: 0)
         end
         
         def reset_parameters
@@ -65,7 +65,7 @@ module MLX
         
         # Embedding forward pass
         def embedding_forward(x)
-          MLX::Core.take(weight, x, axis: 0)
+          MLX.take(weight, x, axis: 0)
         end
         
         # Linear forward pass (e.g., for language model head)
@@ -73,7 +73,7 @@ module MLX
           # x has shape [..., embedding_dim]
           # weight has shape [num_embeddings, embedding_dim]
           # result will have shape [..., num_embeddings]
-          result = MLX::Core.matmul(x, weight.transpose)
+          result = MLX.matmul(x, weight.transpose)
           result + bias
         end
         
