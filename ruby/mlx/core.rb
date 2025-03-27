@@ -70,6 +70,10 @@ module MLX
     def self.modules
       [Constants, Convert, Distributed, Export, FFT, Fast, Indexing, Linalg, Load, Memory, Metal, Ops, Random, Transforms, Trees, Utils]
     end
+
+    def self.classes
+      [Array, Device, Stream, StreamContext, Dtype, GcFunc]
+    end
     
     # IMPORTANT: All the module methods below are just placeholders.
     # The real implementations are provided by the native extension.
@@ -2135,6 +2139,9 @@ module MLX
     # Assign module to constant under MLX::
     const_set(const_name, mod)
 
+    # do not overwrite existing methods
+    next if Core.respond_to?(accessor_name)
+
     # Define accessor method for module (e.g., MLX.fft => MLX::FFT)
     define_singleton_method(accessor_name) do
       const_get(const_name)
@@ -2145,7 +2152,7 @@ module MLX
   #
   class << self
     def method_missing(name, *args, &block)
-      target_mod = Core.modules.find { |mod| mod.respond_to?(name) }
+      target_mod = (Core.modules + Core.classes).find { |mod| mod.respond_to?(name) }
       return target_mod.public_send(name, *args, &block) if target_mod
       super
     end
