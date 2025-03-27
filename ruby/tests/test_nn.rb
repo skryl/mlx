@@ -97,7 +97,7 @@ class TestNN < MLXTestCase
     assert_equal [2], output.shape
     
     # Test linear layer without bias
-    layer_no_bias = MLX.nn.Linear(@in_features, @out_features, bias: false)
+    layer_no_bias = MLX.nn::Linear(@in_features, @out_features, bias: false)
     assert_nil layer_no_bias.bias
     
     x = MLX.random.normal(shape: [@batch_size, @seq_length, @in_features])
@@ -105,8 +105,8 @@ class TestNN < MLXTestCase
     assert_equal [@batch_size, @seq_length, @out_features], y_no_bias.shape
     
     # Test with custom initialization
-    initializer = MLX.nn.initializers.Constant(0.5)
-    layer_custom_init = MLX.nn.Linear(@in_features, @out_features, 
+    initializer = MLX.nn::initializers.Constant(0.5)
+    layer_custom_init = MLX.nn::Linear(@in_features, @out_features, 
                                   weight_initializer: initializer,
                                   bias_initializer: initializer)
     
@@ -182,7 +182,7 @@ class TestNN < MLXTestCase
     x = MLX.random.normal(shape: [@batch_size, in_channels, @seq_length])
     
     # Test with default parameters
-    layer = MLX.nn.Conv1d(in_channels, out_channels, kernel_size)
+    layer = MLX.nn::Conv1d(in_channels, out_channels, kernel_size)
     y = layer.call(x)
     
     # Output shape should be [batch_size, out_channels, sequence_length - kernel_size + 1]
@@ -191,7 +191,7 @@ class TestNN < MLXTestCase
     
     # Test with padding
     padding = 1
-    layer = MLX.nn.Conv1d(in_channels, out_channels, kernel_size, padding: padding)
+    layer = MLX.nn::Conv1d(in_channels, out_channels, kernel_size, padding: padding)
     y = layer.call(x)
     
     # Output shape should be [batch_size, out_channels, sequence_length - kernel_size + 1 + 2*padding]
@@ -200,7 +200,7 @@ class TestNN < MLXTestCase
     
     # Test with stride
     stride = 2
-    layer = MLX.nn.Conv1d(in_channels, out_channels, kernel_size, stride: stride)
+    layer = MLX.nn::Conv1d(in_channels, out_channels, kernel_size, stride: stride)
     y = layer.call(x)
     
     # Output shape should be [batch_size, out_channels, (sequence_length - kernel_size + 1) / stride]
@@ -209,7 +209,7 @@ class TestNN < MLXTestCase
     
     # Test with dilation
     dilation = 2
-    layer = MLX.nn.Conv1d(in_channels, out_channels, kernel_size, dilation: dilation)
+    layer = MLX.nn::Conv1d(in_channels, out_channels, kernel_size, dilation: dilation)
     y = layer.call(x)
     
     # Output shape with dilation
@@ -245,7 +245,7 @@ class TestNN < MLXTestCase
     
     # Test with stride
     stride = 2
-    layer = MLX.nn.Conv2d(in_channels, out_channels, kernel_size, stride: stride)
+    layer = MLX.nn::Conv2d(in_channels, out_channels, kernel_size, stride: stride)
     y = layer.call(x)
     
     # Output shape with stride
@@ -255,7 +255,7 @@ class TestNN < MLXTestCase
     
     # Test with rectangular kernel
     kernel_size = [3, 5]
-    layer = MLX.nn.Conv2d(in_channels, out_channels, kernel_size)
+    layer = MLX.nn::Conv2d(in_channels, out_channels, kernel_size)
     y = layer.call(x)
     
     # Output shape with rectangular kernel
@@ -276,23 +276,23 @@ class TestNN < MLXTestCase
     assert_equal [1, 3, 14, 14], output.shape
     
     # Test AvgPool2d
-    pool = MLX.nn.AvgPool2d(kernel_size: 2)
+    pool = MLX.nn::AvgPool2d(kernel_size: 2)
     x = MLX.random.normal(shape: [@batch_size, @channels_in, @height, @width])
     y = pool.call(x)
     assert_equal [@batch_size, @channels_in, @height / 2, @width / 2], y.shape
     
     # Test GlobalAvgPool2d
-    pool = MLX.nn.GlobalAvgPool2d()
+    pool = MLX.nn::GlobalAvgPool2d()
     y = pool.call(x)
     assert_equal [@batch_size, @channels_in, 1, 1], y.shape
     
     # Test GlobalMaxPool2d
-    pool = MLX.nn.GlobalMaxPool2d()
+    pool = MLX.nn::GlobalMaxPool2d()
     y = pool.call(x)
     assert_equal [@batch_size, @channels_in, 1, 1], y.shape
     
     # Test adaptive pooling
-    pool = MLX.nn.AdaptiveAvgPool2d(output_size: [3, 3])
+    pool = MLX.nn::AdaptiveAvgPool2d(output_size: [3, 3])
     y = pool.call(x)
     assert_equal [@batch_size, @channels_in, 3, 3], y.shape
   end
@@ -324,7 +324,7 @@ class TestNN < MLXTestCase
     MLX.deterministic!(false)
     
     # Test Dropout2d
-    drop = MLX.nn.Dropout2d(p: 0.5)
+    drop = MLX.nn::Dropout2d(p: 0.5)
     x = MLX.random.normal(shape: [@batch_size, @channels_in, @height, @width])
     drop.eval!
     y = drop.call(x)
@@ -359,7 +359,7 @@ class TestNN < MLXTestCase
     
     # Test with 2D input (batch)
     x = MLX.array([[1, 2, 3], [4, 5, 6]])
-    layer = MLX.nn.Embedding(@vocab_size, @embedding_dim)
+    layer = MLX.nn::Embedding(@vocab_size, @embedding_dim)
     y = layer.call(x)
     
     # Output shape should be [2, 3, embedding_dim]
@@ -390,7 +390,7 @@ class TestNN < MLXTestCase
     assert_equal x.shape, output.shape
     
     # Test BatchNorm1d
-    layer = MLX.nn.BatchNorm1d(@in_features)
+    layer = MLX.nn::BatchNorm1d(@in_features)
     x = MLX.random.normal(shape: [@batch_size, @in_features])
     y = layer.call(x)
     assert_equal x.shape, y.shape
@@ -398,7 +398,7 @@ class TestNN < MLXTestCase
     # Test BatchNorm3d
     channels = 4
     depth = 8
-    layer = MLX.nn.BatchNorm3d(channels)
+    layer = MLX.nn::BatchNorm3d(channels)
     x = MLX.random.normal(shape: [@batch_size, channels, depth, @height, @width])
     y = layer.call(x)
     assert_equal x.shape, y.shape
@@ -423,14 +423,14 @@ class TestNN < MLXTestCase
     assert_equal x.shape, output.shape
     
     # Test without bias
-    layer = MLX.nn.LayerNorm([@in_features], bias: false)
+    layer = MLX.nn::LayerNorm([@in_features], bias: false)
     assert_nil layer.bias
     y = layer.call(x)
     assert_equal x.shape, y.shape
     
     # Test with larger normalized shape
     normalized_shape = [@seq_length, @in_features]
-    layer = MLX.nn.LayerNorm(normalized_shape)
+    layer = MLX.nn::LayerNorm(normalized_shape)
     
     # Parameter shapes should match the normalized shape
     assert_equal normalized_shape, layer.weight.shape
@@ -445,7 +445,7 @@ class TestNN < MLXTestCase
     # Test group normalization
     num_groups = 2  # Must divide channels
     channels = 4
-    layer = MLX.nn.GroupNorm(num_groups, channels)
+    layer = MLX.nn::GroupNorm(num_groups, channels)
     
     # Check parameters
     assert_equal [channels], layer.weight.shape
@@ -459,14 +459,14 @@ class TestNN < MLXTestCase
     assert_equal x.shape, y.shape
     
     # Test with num_groups = channels (should be similar to instance norm)
-    layer = MLX.nn.GroupNorm(channels, channels)
+    layer = MLX.nn::GroupNorm(channels, channels)
     y = layer.call(x)
     assert_equal x.shape, y.shape
   end
   
   def test_instance_norm
     # Test instance normalization
-    layer = MLX.nn.InstanceNorm2d(@channels_in)
+    layer = MLX.nn::InstanceNorm2d(@channels_in)
     
     # Check parameters
     assert_equal [@channels_in], layer.weight.shape
@@ -480,7 +480,7 @@ class TestNN < MLXTestCase
     assert_equal x.shape, y.shape
     
     # Test InstanceNorm1d
-    layer = MLX.nn.InstanceNorm1d(@in_features)
+    layer = MLX.nn::InstanceNorm1d(@in_features)
     x = MLX.random.normal(shape: [@batch_size, @in_features, @seq_length])
     y = layer.call(x)
     assert_equal x.shape, y.shape
@@ -518,7 +518,7 @@ class TestNN < MLXTestCase
     @head_dim = @hidden_size / @num_heads
     
     # Test with attention mask
-    layer = MLX.nn.MultiHeadAttention(@hidden_size, @num_heads)
+    layer = MLX.nn::MultiHeadAttention(@hidden_size, @num_heads)
     x = MLX.random.normal(shape: [@batch_size, @seq_len, @hidden_size])
     mask = MLX.zeros([@seq_len, @seq_len])
     output = layer.call(x, x, x, mask: mask)
@@ -533,7 +533,7 @@ class TestNN < MLXTestCase
     @num_heads = 2
     
     # Test self attention module
-    layer = MLX.nn.SelfAttention(@hidden_size, @num_heads)
+    layer = MLX.nn::SelfAttention(@hidden_size, @num_heads)
     
     # Test forward pass
     x = MLX.random.normal(shape: [@batch_size, @seq_len, @hidden_size])
@@ -543,7 +543,7 @@ class TestNN < MLXTestCase
     assert_equal [@batch_size, @seq_len, @hidden_size], output.shape
     
     # Test with dropout
-    layer = MLX.nn.SelfAttention(@hidden_size, @num_heads, dropout: 0.1)
+    layer = MLX.nn::SelfAttention(@hidden_size, @num_heads, dropout: 0.1)
     output = layer.call(x, training: true)
     assert_equal [@batch_size, @seq_len, @hidden_size], output.shape
   end
@@ -556,7 +556,7 @@ class TestNN < MLXTestCase
     @num_heads = 2
     
     # Test cross attention module
-    layer = MLX.nn.CrossAttention(@hidden_size, @num_heads)
+    layer = MLX.nn::CrossAttention(@hidden_size, @num_heads)
     
     # Test forward pass
     x = MLX.random.normal(shape: [@batch_size, @seq_len, @hidden_size])
@@ -575,7 +575,7 @@ class TestNN < MLXTestCase
     @hidden_size = 10
     
     # Test the basic RNN cell
-    cell = MLX.nn.RNNCell(@input_size, @hidden_size)
+    cell = MLX.nn::RNNCell(@input_size, @hidden_size)
     
     # Check parameters
     assert_equal [[@hidden_size, @input_size], [@hidden_size, @hidden_size], [@hidden_size]], [
@@ -598,7 +598,7 @@ class TestNN < MLXTestCase
     @hidden_size = 10
     
     # Test the LSTM cell
-    cell = MLX.nn.LSTMCell(@input_size, @hidden_size)
+    cell = MLX.nn::LSTMCell(@input_size, @hidden_size)
     
     # Check parameters - LSTM has 4 gates
     assert_equal [[@hidden_size * 4, @input_size], [@hidden_size * 4, @hidden_size], [@hidden_size * 4]], [
@@ -623,7 +623,7 @@ class TestNN < MLXTestCase
     @hidden_size = 10
     
     # Test the GRU cell
-    cell = MLX.nn.GRUCell(@input_size, @hidden_size)
+    cell = MLX.nn::GRUCell(@input_size, @hidden_size)
     
     # Check parameters - GRU has 3 gates
     assert_equal [[@hidden_size * 3, @input_size], [@hidden_size * 3, @hidden_size], [@hidden_size * 3]], [
@@ -648,7 +648,7 @@ class TestNN < MLXTestCase
     @num_layers = 2
     
     # Test the RNN module (multi-layer)
-    rnn = MLX.nn.RNN(@input_size, @hidden_size, num_layers: @num_layers)
+    rnn = MLX.nn::RNN(@input_size, @hidden_size, num_layers: @num_layers)
     
     # Check that we have the right number of cells
     assert_equal @num_layers, rnn.cells.length
@@ -666,7 +666,7 @@ class TestNN < MLXTestCase
     assert_equal [@num_layers, @batch_size, @hidden_size], hn.shape
     
     # Test with bidirectional
-    rnn = MLX.nn.RNN(@input_size, @hidden_size, num_layers: @num_layers, bidirectional: true)
+    rnn = MLX.nn::RNN(@input_size, @hidden_size, num_layers: @num_layers, bidirectional: true)
     output, hn = rnn.call(x)
     
     # For bidirectional, hidden size is doubled in output
@@ -684,7 +684,7 @@ class TestNN < MLXTestCase
     @num_layers = 2
     
     # Test the LSTM module (multi-layer)
-    lstm = MLX.nn.LSTM(@input_size, @hidden_size, num_layers: @num_layers)
+    lstm = MLX.nn::LSTM(@input_size, @hidden_size, num_layers: @num_layers)
     
     # Check that we have the right number of cells
     assert_equal @num_layers, lstm.cells.length
@@ -713,7 +713,7 @@ class TestNN < MLXTestCase
     @num_layers = 2
     
     # Test the GRU module (multi-layer)
-    gru = MLX.nn.GRU(@input_size, @hidden_size, num_layers: @num_layers)
+    gru = MLX.nn::GRU(@input_size, @hidden_size, num_layers: @num_layers)
     
     # Check that we have the right number of cells
     assert_equal @num_layers, gru.cells.length
@@ -733,7 +733,7 @@ class TestNN < MLXTestCase
   
   def test_flatten
     # Test flatten layer
-    layer = MLX.nn.Flatten()
+    layer = MLX.nn::Flatten()
     
     # Test with 4D input
     x = MLX.random.normal(shape: [@batch_size, @channels_in, @height, @width])
@@ -743,7 +743,7 @@ class TestNN < MLXTestCase
     assert_equal [@batch_size, @channels_in * @height * @width], y.shape
     
     # Test with start_dim and end_dim
-    layer = MLX.nn.Flatten(start_dim: 2)
+    layer = MLX.nn::Flatten(start_dim: 2)
     x = MLX.random.normal(shape: [@batch_size, @channels_in, @height, @width])
     y = layer.call(x)
     
@@ -753,7 +753,7 @@ class TestNN < MLXTestCase
   
   def test_identity
     # Test identity layer
-    layer = MLX.nn.Identity()
+    layer = MLX.nn::Identity()
     
     # Test with various input shapes
     shapes = [
@@ -778,7 +778,7 @@ class TestNN < MLXTestCase
     max_seq_len = 100
     d_model = 64
     
-    pos_encoder = MLX.nn.SinusoidalPositionalEncoding(d_model, max_seq_len)
+    pos_encoder = MLX.nn::SinusoidalPositionalEncoding(d_model, max_seq_len)
     
     # Test shape of encoding
     encoding = pos_encoder.call()
@@ -794,10 +794,10 @@ class TestNN < MLXTestCase
   end
   
   def test_module_utilities
-    m = MLX.nn.Sequential(
-      MLX.nn.Sequential(MLX.nn.Linear(2, 10), MLX::NN::Activations.relu),
-      MLX.nn.Sequential(MLX.nn.Linear(10, 10), MLX.nn.ReLU.new),
-      MLX.nn.Linear(10, 1),
+    m = MLX.nn::Sequential(
+      MLX.nn::Sequential(MLX.nn::Linear(2, 10), MLX::NN::Activations.relu),
+      MLX.nn::Sequential(MLX.nn::Linear(10, 10), MLX.nn::ReLU.new),
+      MLX.nn::Linear(10, 1),
       MLX::NN::Activations.sigmoid
     )
 
@@ -886,10 +886,10 @@ class TestNN < MLXTestCase
   def test_save_weights
     # Helper method to create a model
     def make_model
-      MLX.nn.Sequential(
-        MLX.nn.Linear(2, 2),
-        MLX.nn.ReLU.new,
-        MLX.nn.Linear(2, 2)
+      MLX.nn::Sequential(
+        MLX.nn::Linear(2, 2),
+        MLX.nn::ReLU.new,
+        MLX.nn::Linear(2, 2)
       )
     end
 
@@ -943,7 +943,7 @@ class TestNN < MLXTestCase
   end
 
   def test_load_from_weights
-    m = MLX.nn.Linear(2, 2)
+    m = MLX.nn::Linear(2, 2)
 
     # Test with too few weights
     weights = [["weight", MLX.ones([2, 2])]]
@@ -993,10 +993,10 @@ class TestNN < MLXTestCase
   end
 
   def test_chaining
-    m = MLX.nn.Sequential(
-      MLX.nn.Linear(2, 2),
-      MLX.nn.ReLU.new,
-      MLX.nn.Linear(2, 1)
+    m = MLX.nn::Sequential(
+      MLX.nn::Linear(2, 2),
+      MLX.nn::ReLU.new,
+      MLX.nn::Linear(2, 1)
     )
     
     pre_freeze_num_params = m.parameters.size
@@ -1017,7 +1017,7 @@ class TestNN < MLXTestCase
     batch_size = 2
     
     # Test bilinear layer
-    layer = MLX.nn.Bilinear(in_features1, in_features2, out_features)
+    layer = MLX.nn::Bilinear(in_features1, in_features2, out_features)
     
     # Check parameters
     assert_equal [out_features, in_features1, in_features2], layer.weight.shape
@@ -1031,7 +1031,7 @@ class TestNN < MLXTestCase
     assert_equal [batch_size, out_features], y.shape
     
     # Test without bias
-    layer = MLX.nn.Bilinear(in_features1, in_features2, out_features, bias: false)
+    layer = MLX.nn::Bilinear(in_features1, in_features2, out_features, bias: false)
     assert_nil layer.bias
     
     y = layer.call(x1, x2)
@@ -1043,10 +1043,10 @@ class TestNN < MLXTestCase
     scale_factor = 2
     
     # Create upsampling layers with different modes
-    upsample_nearest = MLX.nn.Upsample(scale_factor: scale_factor, mode: "nearest", align_corners: true)
-    upsample_bilinear = MLX.nn.Upsample(scale_factor: scale_factor, mode: "linear", align_corners: true)
-    upsample_nearest_no_align_corners = MLX.nn.Upsample(scale_factor: scale_factor, mode: "nearest", align_corners: false)
-    upsample_bilinear_no_align_corners = MLX.nn.Upsample(scale_factor: scale_factor, mode: "linear", align_corners: false)
+    upsample_nearest = MLX.nn::Upsample(scale_factor: scale_factor, mode: "nearest", align_corners: true)
+    upsample_bilinear = MLX.nn::Upsample(scale_factor: scale_factor, mode: "linear", align_corners: true)
+    upsample_nearest_no_align_corners = MLX.nn::Upsample(scale_factor: scale_factor, mode: "nearest", align_corners: false)
+    upsample_bilinear_no_align_corners = MLX.nn::Upsample(scale_factor: scale_factor, mode: "linear", align_corners: false)
     
     # Test single feature map with align_corners
     x = MLX.arange(b * h * w * c).reshape([b, c, h, w]).transpose([0, 2, 3, 1])
@@ -1099,7 +1099,7 @@ class TestNN < MLXTestCase
     seq_len = 10
     
     # Create sinusoidal positional encoding
-    sin_pe = MLX.nn.SinusoidalPositionalEncoding(hidden_size, max_len)
+    sin_pe = MLX.nn::SinusoidalPositionalEncoding(hidden_size, max_len)
     
     # Test encoding shape when called without input
     encoding = sin_pe.call
@@ -1127,7 +1127,7 @@ class TestNN < MLXTestCase
     k = MLX.random.normal(shape: [batch_size, num_heads, seq_len, 8])
     
     # Create ALiBi attention bias
-    alibi = MLX.nn.attention.alibi(num_heads, seq_len)
+    alibi = MLX.nn::attention.alibi(num_heads, seq_len)
     
     # Check shape of alibi bias
     assert_equal [1, num_heads, 1, seq_len], alibi.shape
@@ -1137,7 +1137,7 @@ class TestNN < MLXTestCase
     
     # Test with float16
     q_fp16 = q.astype(MLX.float16)
-    alibi_fp16 = MLX.nn.attention.alibi(num_heads, seq_len, dtype: MLX.float16)
+    alibi_fp16 = MLX.nn::attention.alibi(num_heads, seq_len, dtype: MLX.float16)
     assert_equal MLX.float16, alibi_fp16.dtype
   end
 
@@ -1146,37 +1146,37 @@ class TestNN < MLXTestCase
     x = MLX.array([-2.0, -1.0, 0.0, 1.0, 2.0])
     
     # Test softmax
-    softmax = MLX.nn.Softmax.new(dim: 0)
+    softmax = MLX.nn::Softmax.new(dim: 0)
     softmax_out = softmax.call(x)
     # Sum of softmax outputs should be approximately 1
     assert_in_delta 1.0, MLX.sum(softmax_out).item, 1e-5
     
     # Test log_softmax
-    log_softmax = MLX.nn.LogSoftmax.new(dim: 0)
+    log_softmax = MLX.nn::LogSoftmax.new(dim: 0)
     log_softmax_out = log_softmax.call(x)
     # Check that log_softmax values are less than or equal to 0
     assert MLX.all(log_softmax_out <= 0).item
     
     # Test softplus
-    softplus = MLX.nn.Softplus.new
+    softplus = MLX.nn::Softplus.new
     softplus_out = softplus.call(x)
     # Check that softplus values are positive
     assert MLX.all(softplus_out > 0).item
     
     # Test mish
-    mish = MLX.nn.Mish.new
+    mish = MLX.nn::Mish.new
     mish_out = mish.call(x)
     # Verify expected behavior: negative inputs give smaller values
     assert mish_out[0].item < mish_out[3].item
     
     # Test log_sigmoid
-    log_sigmoid = MLX.nn.LogSigmoid.new
+    log_sigmoid = MLX.nn::LogSigmoid.new
     log_sigmoid_out = log_sigmoid.call(x)
     # Check that log_sigmoid values are less than or equal to 0
     assert MLX.all(log_sigmoid_out <= 0).item
     
     # Test CELU
-    celu = MLX.nn.CELU.new(alpha: 1.0)
+    celu = MLX.nn::CELU.new(alpha: 1.0)
     celu_out = celu.call(x)
     # Verify behavior: positive values unchanged, negative values transformed
     assert_equal x[3].item, celu_out[3].item
@@ -1185,21 +1185,21 @@ class TestNN < MLXTestCase
     # Test GELU (already in test_activation_functions)
     
     # Test PReLU
-    prelu = MLX.nn.PReLU.new
+    prelu = MLX.nn::PReLU.new
     prelu_out = prelu.call(x)
     # Verify behavior: positive values unchanged, negative values scaled
     assert_equal x[3].item, prelu_out[3].item
     assert prelu_out[0].item > -2.0
     
     # Test SELU
-    selu = MLX.nn.SELU.new
+    selu = MLX.nn::SELU.new
     selu_out = selu.call(x)
     # Verify behavior: normalized outputs
     assert selu_out[0].item > -2.0
     assert_equal x[2].item, selu_out[2].item
     
     # Test Hard Tanh
-    hard_tanh = MLX.nn.Hardtanh.new(min_val: -1.0, max_val: 1.0)
+    hard_tanh = MLX.nn::Hardtanh.new(min_val: -1.0, max_val: 1.0)
     hard_tanh_out = hard_tanh.call(x)
     # Check that values are clipped to [-1, 1]
     assert_equal -1.0, hard_tanh_out[0].item
@@ -1210,7 +1210,7 @@ class TestNN < MLXTestCase
   def test_dropout3d
     # Test 3D dropout
     x = MLX.ones([2, 4, 4, 4, 4])  # [batch, channels, depth, height, width]
-    drop = MLX.nn.Dropout3d(p: 0.5)
+    drop = MLX.nn::Dropout3d(p: 0.5)
     
     # Test in eval mode
     drop.eval!
@@ -1242,10 +1242,10 @@ class TestNN < MLXTestCase
   def test_quantize
     # Test model quantization
     def make_model
-      MLX.nn.Sequential(
-        MLX.nn.Embedding(5, 256),
-        MLX.nn.ReLU.new,
-        MLX.nn.Linear(256, 256)
+      MLX.nn::Sequential(
+        MLX.nn::Embedding(5, 256),
+        MLX.nn::ReLU.new,
+        MLX.nn::Linear(256, 256)
       )
     end
     
@@ -1253,7 +1253,7 @@ class TestNN < MLXTestCase
     m = make_model()
     
     # Apply quantization
-    MLX.nn.quantize(m)
+    MLX.nn::quantize(m)
     
     # Check that layers are properly quantized
     assert m.layers[0].is_a?(MLX::NN::QuantizedEmbedding)
@@ -1262,7 +1262,7 @@ class TestNN < MLXTestCase
     
     # Test with class predicate
     m = make_model()
-    MLX.nn.quantize(m) do |_, mod|
+    MLX.nn::quantize(m) do |_, mod|
       mod.is_a?(MLX::NN::Layers::Linear)
     end
     
@@ -1278,10 +1278,10 @@ class TestNN < MLXTestCase
     vocab_size = 32
     
     # Create regular embedding
-    emb = MLX.nn.Embedding(vocab_size, embedding_dim)
+    emb = MLX.nn::Embedding(vocab_size, embedding_dim)
     
     # Create quantized embedding from regular embedding
-    qemb = MLX.nn.QuantizedEmbedding.from_embedding(emb, bits: 8)
+    qemb = MLX.nn::QuantizedEmbedding.from_embedding(emb, bits: 8)
     
     # Test forward pass
     x = MLX.array([2, 6, 9, 3, 0, 3])
@@ -1313,7 +1313,7 @@ class TestNN < MLXTestCase
     seq_len = 4
     
     # Create causal mask with float16
-    mask = MLX.nn.MultiHeadAttention.create_additive_causal_mask(seq_len, MLX.float16)
+    mask = MLX.nn::MultiHeadAttention.create_additive_causal_mask(seq_len, MLX.float16)
     
     # Check that mask contains no NaN values
     assert !MLX.any(MLX.isnan(mask)).item
@@ -1322,7 +1322,7 @@ class TestNN < MLXTestCase
     assert mask[0, -1].item < 0
     
     # Test with bfloat16
-    mask = MLX.nn.MultiHeadAttention.create_additive_causal_mask(seq_len, MLX.bfloat16)
+    mask = MLX.nn::MultiHeadAttention.create_additive_causal_mask(seq_len, MLX.bfloat16)
     
     # Check that mask contains no NaN values
     assert !MLX.any(MLX.isnan(mask)).item
@@ -1340,7 +1340,7 @@ class TestNN < MLXTestCase
     end
     
     # Create layer
-    layer = MLX.nn.Linear(input_dims: 4, output_dims: 8, bias: true)
+    layer = MLX.nn::Linear(input_dims: 4, output_dims: 8, bias: true)
     assert_dtype(layer, MLX.float32)
     
     # Change dtype

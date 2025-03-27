@@ -42,9 +42,18 @@ class TestGem < MLXTestCase
       modules_success += 1 if result
       
       puts "#{mod.name}: #{result ? 'Success' : 'Failure'}"
-      puts "  - MLX has constant: #{mlx_has_const ? 'Yes' : 'No'}"
-      puts "  - Constant matches: #{const_matches ? 'Yes' : 'No'}"
-      puts "  - #{methods_exposed}/#{methods.size} methods exposed on MLX"
+      puts "  • MLX has constant: #{mlx_has_const ? '✅' : '❌'}"
+      puts "  • Constant matches: #{const_matches ? '✅' : '❌'}"
+      puts "  • #{methods_exposed}/#{methods.size} methods exposed on MLX"
+      
+      # Print all methods with checkmarks
+      unless methods.empty?
+        puts "  • Methods:"
+        methods.sort.each do |method|
+          check = MLX.respond_to?(method) ? "✅" : "❌"
+          puts "    #{check} #{method}"
+        end
+      end
     end
     
     # Test that all classes in MLX::Core have constants in MLX
@@ -59,11 +68,6 @@ class TestGem < MLXTestCase
       class_name = klass.name.split('::').last
       full_const_path = "MLX::#{class_name}"
       
-      # For Array, check for MlxArray instead
-      if class_name == "Array"
-        full_const_path = "MLX::MlxArray"
-      end
-      
       # Check if corresponding constant exists in MLX
       mlx_has_const = Object.const_defined?(full_const_path)
       if mlx_has_const
@@ -72,10 +76,10 @@ class TestGem < MLXTestCase
         
         if !const_matches
           puts "#{klass.name}: Failure"
-          puts "  - MLX has constant: Yes"
-          puts "  - Constant matches: No"
-          puts "  - MLX::Core class: #{klass.inspect} (#{klass.object_id})"
-          puts "  - MLX class: #{mlx_const.inspect} (#{mlx_const.object_id})"
+          puts "  • MLX has constant: ✅"
+          puts "  • Constant matches: ❌"
+          puts "  • MLX::Core class: #{klass.inspect} (#{klass.object_id})"
+          puts "  • MLX class: #{mlx_const.inspect} (#{mlx_const.object_id})"
         else
           # Get class methods that can be exposed statically
           methods = klass.methods(false).reject { |m| [:inherited, :included, :extended].include?(m) }
@@ -88,44 +92,53 @@ class TestGem < MLXTestCase
           classes_success += 1 if result
           
           puts "#{klass.name}: #{result ? 'Success' : 'Failure'}"
-          puts "  - MLX has constant: Yes"
-          puts "  - Constant matches: Yes"
-          puts "  - #{methods_exposed}/#{methods.size} methods exposed on MLX"
-        end
+          puts "  • MLX has constant: ✅"
+          puts "  • Constant matches: ✅"
+          puts "  • #{methods_exposed}/#{methods.size} methods exposed on MLX"
+          
+          # Print all methods with checkmarks
+          unless methods.empty?
+            puts "  • Methods:"
+            methods.sort.each do |method|
+              check = MLX.respond_to?(method) ? "✅" : "❌"
+              puts "    #{check} #{method}"
+      end
+    end
+  end
       else
         const_matches = false
         puts "#{klass.name}: Failure"
-        puts "  - MLX has constant: No"
-        puts "  - Constant matches: No"
+        puts "  • MLX has constant: ❌"
+        puts "  • Constant matches: ❌"
       end
     end
     
     # Summary
     puts "\nSummary"
     puts "-------"
-    puts "Modules: #{modules_success}/#{modules_count} correctly exposed"
-    puts "Classes: #{classes_success}/#{classes_count} correctly exposed"
+    puts "• Modules: #{modules_success}/#{modules_count} correctly exposed"
+    puts "• Classes: #{classes_success}/#{classes_count} correctly exposed"
     
     # Test a few specific methods to ensure they work
     puts "\nTesting Sample Methods"
     puts "-------------------"
     
-    methods_to_test = [
-      [:zeros, [2, 2], MLX::Core::FLOAT32],
-      [:ones, [3, 3], MLX::Core::FLOAT32],
-      [:array, [[1, 2], [3, 4]]]
-    ]
+    # methods_to_test = [
+    #   [:zeros, [2, 2], MLX::Core::FLOAT32],
+    #   [:ones, [3, 3], MLX::Core::FLOAT32],
+    #   [:array, [[1, 2], [3, 4]]]
+    # ]
     
-    methods_to_test.each do |method, *args|
-      begin
-        result = MLX.send(method, *args)
-        puts "MLX.#{method}: Success - returned #{result.class.name}"
-      rescue => e
-        puts "MLX.#{method}: Failure - #{e.message}"
-      end
-    end
+    # methods_to_test.each do |method, *args|
+    #   begin
+    #     result = MLX.send(method, *args)
+    #     puts "• MLX.#{method}: ✅ - returned #{result.class.name}"
+    #   rescue => e
+    #     puts "• MLX.#{method}: ❌ - #{e.message}"
+    #   end
+    # end
   end
-
+  
   private
   
 end

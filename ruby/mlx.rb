@@ -50,47 +50,25 @@ module MLX
     def self.nan; Core.nan; end
     def self.newaxis; Core.newaxis; end
 
+    modules = Core.modules + Core.classes 
+
     # Dynamically assign constants and accessor methods
-    Core.modules.each do |mod|
+    (Core.modules + Core.classes).each do |mod|
       const_name = mod.name.split('::').last
       accessor_name = const_name.downcase.to_sym
 
-      # do not overwrite existing methods
-      next if Core.respond_to?(accessor_name)
-
       # Assign module to constant under MLX::
-      # Use fully qualified constant path
-      const_set(const_name, mod)
+      const_set(const_name, mod) unless const_defined?("MLX::#{const_name}")
 
       # Define accessor method for module (e.g., MLX.fft => MLX::FFT)
       define_singleton_method(accessor_name) do
-        # Use fully qualified constant path
-        Object.const_get("MLX::#{const_name}")
-      end
+        const_get(const_name)
+      end unless respond_to?(accessor_name)
     end
 
-    # Also expose Core classes as constants and provide accessors
-    Core.classes.each do |klass|
-      const_name = klass.name.split('::').last
-      
-      # Use a different name for Array to avoid collision with Ruby's Array
-      if const_name == "Array"
-        const_name = "MlxArray"
-      end
-      
-      accessor_name = const_name.downcase.to_sym
-
-      # do not overwrite existing methods
-      next if respond_to?(accessor_name)
-
-      # Assign class to constant under MLX::
-      const_set(const_name, klass)
-
-      # Define accessor method for class
-      define_singleton_method(accessor_name) do
-        # Use fully qualified constant path
-        Object.const_get("MLX::#{const_name}")
-      end
+    # Define accessor method for Array
+    define_singleton_method(:array) do
+      Core::Array
     end
 
     # Delegate static MLX.method calls to static module or class methods

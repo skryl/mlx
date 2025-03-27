@@ -43,6 +43,7 @@ module MLX
   
     # Full Class List
     class Array; end
+    class ArrayAt; end
     class Device; end
     class Stream; end
     class StreamContext; end
@@ -72,7 +73,7 @@ module MLX
     end
 
     def self.classes
-      [Array, Device, Stream, StreamContext, Dtype, GcFunc]
+      [Array, ArrayAt, Device, Stream, StreamContext, Dtype, GcFunc]
     end
     
     # IMPORTANT: All the module methods below are just placeholders.
@@ -2128,38 +2129,6 @@ module MLX
       def self.contiguous(a, allow_col_major=false, stream=nil); end
     end
 
-  end
-
-  # Dynamically assign constants and accessor methods
-  #
-  Core.modules.each do |mod|
-    const_name = mod.name.split('::').last
-    accessor_name = const_name.downcase.to_sym
-
-    # Assign module to constant under MLX::
-    const_set(const_name, mod)
-
-    # do not overwrite existing methods
-    next if Core.respond_to?(accessor_name)
-
-    # Define accessor method for module (e.g., MLX.fft => MLX::FFT)
-    define_singleton_method(accessor_name) do
-      const_get(const_name)
-    end
-  end
-
-  # Delegate static MLX.method calls to static module methods
-  #
-  class << self
-    def method_missing(name, *args, &block)
-      target_mod = (Core.modules + Core.classes).find { |mod| mod.respond_to?(name) }
-      return target_mod.public_send(name, *args, &block) if target_mod
-      super
-    end
-
-    def respond_to_missing?(name, include_private = false)
-      Core.modules.any? { |mod| mod.respond_to?(name) } || super
-    end
   end
 
 end
