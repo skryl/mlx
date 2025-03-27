@@ -26,7 +26,7 @@ mlx_lib_dir = ENV['MLX_LIB_DIR'] || File.expand_path('../../../build', __dir__)
 puts "Using MLX libs from: #{mlx_lib_dir}"
 
 # Add compiler and linker flags
-$CXXFLAGS << " -std=c++17 -frtti -fexceptions -fmax-errors=0"
+$CXXFLAGS << " -std=c++17 -frtti -fexceptions -fmax-errors=0 -fvisibility=hidden -fvisibility-inlines-hidden"
 
 # Add macOS specific frameworks and linker flags
 if RUBY_PLATFORM =~ /darwin/
@@ -34,6 +34,10 @@ if RUBY_PLATFORM =~ /darwin/
   # Link to MLX library
   $LDFLAGS << " -L#{mlx_lib_dir} -lmlx"
 end
+
+# Add MLX include path
+mlx_include_path = "../../mlx"
+$INCFLAGS << " -I#{File.expand_path(mlx_include_path)}"
 
 # Get all source files from ruby/src
 src_dir = File.expand_path('../../src', __dir__)

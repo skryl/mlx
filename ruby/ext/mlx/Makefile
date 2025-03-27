@@ -86,10 +86,10 @@ warnflags = -Wall -Wextra -Wextra-tokens -Wdeprecated-declarations -Wdivision-by
 cppflags = 
 CCDLFLAGS = -fno-common
 CFLAGS   = $(CCDLFLAGS) $(cflags)  -fno-common -pipe $(ARCH_FLAG)
-INCFLAGS = -I. -I$(arch_hdrdir) -I$(hdrdir)/ruby/backward -I$(hdrdir) -I$(srcdir) -I/Users/skryl/Desktop/Dev/mlx-ruby/ruby/include -I/Users/skryl/Desktop/Dev/mlx-ruby/ruby/src -I/Users/skryl/Desktop/Dev/mlx-ruby
+INCFLAGS = -I. -I$(arch_hdrdir) -I$(hdrdir)/ruby/backward -I$(hdrdir) -I$(srcdir) -I/Users/skryl/Desktop/Dev/mlx-ruby/ruby/include -I/Users/skryl/Desktop/Dev/mlx-ruby/ruby/src -I/Users/skryl/Desktop/Dev/mlx-ruby -I/Users/skryl/Desktop/Dev/mlx-ruby/ruby/mlx
 DEFS     = 
 CPPFLAGS =  -I/opt/homebrew/opt/gmp/include -D_XOPEN_SOURCE -D_DARWIN_C_SOURCE -D_DARWIN_UNLIMITED_SELECT -D_REENTRANT $(DEFS) $(cppflags)
-CXXFLAGS = $(CCDLFLAGS) -fdeclspec -std=c++17 -frtti -fexceptions -fmax-errors=0 -framework Foundation -framework Metal -framework MetalPerformanceShaders $(ARCH_FLAG)
+CXXFLAGS = $(CCDLFLAGS) -fdeclspec -std=c++17 -frtti -fexceptions -fmax-errors=0 -fvisibility=hidden -fvisibility-inlines-hidden -framework Foundation -framework Metal -framework MetalPerformanceShaders $(ARCH_FLAG)
 ldflags  = -L. -fstack-protector-strong -L/opt/homebrew/opt/gmp/lib -L/Users/skryl/Desktop/Dev/mlx-ruby/build -lmlx
 dldflags = -L/opt/homebrew/opt/gmp/lib -Wl,-undefined,dynamic_lookup $(LIBRUBYARG_SHARED)
 ARCH_FLAG = 
