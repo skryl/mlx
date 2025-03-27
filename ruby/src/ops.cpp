@@ -5,6 +5,7 @@
 
 // Add einsum header if not already included
 #include "mlx/einsum.h"
+#include "mlx/io.h"
 
 namespace mx = mlx::core;
 
@@ -3345,8 +3346,8 @@ static VALUE ops_save(int argc, VALUE* argv, VALUE self) {
   char* filename = StringValueCStr(file_val);
   mx::array& arr = get_array(arr_val);
 
-  // Use the MLX save function
-  mx::save(filename, arr);
+  // Use the MLX save function with the correct namespace
+  mx::save(std::string(filename), arr);
 
   return Qnil;
 }
